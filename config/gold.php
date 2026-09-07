@@ -48,6 +48,9 @@ return [
         'pop_batch' => (int) env('GOLD_INDEX_POP_BATCH', 1000),
         // Jobs pushed to the queue per pipelined round trip.
         'dispatch_batch' => (int) env('GOLD_INDEX_DISPATCH_BATCH', 1000),
+        // A popped alert not acknowledged within this window, while the alerts
+        // queue is idle, is considered lost and dispatched again.
+        'inflight_ttl_seconds' => (int) env('GOLD_INDEX_INFLIGHT_TTL_SECONDS', 600),
     ],
 
     /*

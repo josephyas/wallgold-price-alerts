@@ -112,3 +112,13 @@ docker compose exec app php artisan price:fake-push 2690 2701.25   # walk the pr
 open http://localhost:8025                                          # the email, with the new price
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/1 "${AUTH[@]}"   # 404: delivered alerts are deleted
 ```
+
+## Reconciliation
+
+`php artisan alerts:reconcile` runs every minute from the scheduler and is the safety net for everything that can drift:
+
+- **Index not ready or behind the database** (Redis restarted, or an index write failed after a commit): the index is rebuilt from the active rows. `--rebuild` forces this.
+- **Popped but never delivered** (a watcher died between popping and dispatching, or a job was lost): in-flight entries older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` are dispatched again, but only while the alerts queue is idle, so a backlog is never doubled.
+- **Stuck in `sending`** (a worker died mid-send): rows older than `GOLD_DELIVERY_STALE_AFTER_SECONDS` are dispatched again; the delivery job's claim re-admits them.
+
+Every action is idempotent because the delivery job's conditional claim decides who sends. A duplicate dispatch loses the claim and does nothing.
