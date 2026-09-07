@@ -66,3 +66,11 @@ The index is a projection, not the record of truth: `alerts:ready` says whether 
 Each popped alert becomes one `DeliverPriceAlert` job on the `alerts` queue. The job claims the row with a single conditional update (`active` to `sending`), which is atomic on every supported database, so two jobs for the same alert cannot both send. It then emails the user with the new price, deletes the row, and acknowledges the in-flight entry in the index.
 
 A message the mail server refuses puts the alert back to `active` and lets the queue retry with backoff; after the last attempt the row is marked `failed` so the user can see it. A claim that never completes (the worker died mid-send) becomes claimable again after `GOLD_DELIVERY_STALE_AFTER_SECONDS`, which favours a rare duplicate over a silent miss.
+
+## Watcher
+
+`php artisan price:watch` is the long-running process that polls the feed every `GOLD_POLL_INTERVAL_MS` (default 1000, minimum 100) and matches each quote against the index. Every tick is one atomic pop per batch, followed by one pipelined push of the delivery jobs, so the watcher never waits on an email. A failing feed or index makes it back off exponentially (up to 10 s) rather than exit; `SIGTERM` stops it cleanly. `--once` runs a single tick (useful for cron, health checks and tests) and `-v` prints one line per tick.
+
+The interval is bounded by the provider: the fake feed is comfortable at a few hundred milliseconds, while real HTTP APIs usually allow far fewer calls. A streaming provider would be the upgrade path for sub-second latency.
+
+`php artisan price:fake-push 2690 2701.25` steers the fake feed to exact values on its next ticks, which is how the demo walks a price across an alert.

@@ -43,6 +43,13 @@ return [
 
     'redis_connection' => env('GOLD_REDIS_CONNECTION', 'default'),
 
+    'index' => [
+        // Alerts taken from the index per call; bounded by the Lua stack (keep it at or under 1000).
+        'pop_batch' => (int) env('GOLD_INDEX_POP_BATCH', 1000),
+        // Jobs pushed to the queue per pipelined round trip.
+        'dispatch_batch' => (int) env('GOLD_INDEX_DISPATCH_BATCH', 1000),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Delivery

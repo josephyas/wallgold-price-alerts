@@ -11,7 +11,7 @@ use App\Pricing\Contracts\ScriptedPrices;
 use App\Pricing\Price;
 use App\Pricing\Providers\FakePriceProvider;
 use App\Pricing\Providers\GoldApiPriceProvider;
-use App\Pricing\Providers\InMemoryScriptedPrices;
+use App\Pricing\Providers\RedisScriptedPrices;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
@@ -31,7 +31,12 @@ class AppServiceProvider extends ServiceProvider
             return new RedisAlertIndex($app->make(RedisFactory::class), (string) $config->get('gold.redis_connection'));
         });
 
-        $this->app->singleton(ScriptedPrices::class, InMemoryScriptedPrices::class);
+        $this->app->singleton(ScriptedPrices::class, function (Application $app): ScriptedPrices {
+            /** @var Config $config */
+            $config = $app->make(Config::class);
+
+            return new RedisScriptedPrices($app->make(RedisFactory::class), (string) $config->get('gold.redis_connection'));
+        });
 
         $this->app->singleton(PriceProvider::class, function (Application $app): PriceProvider {
             /** @var Config $config */
