@@ -54,8 +54,6 @@ final class RedisAlertIndex implements AlertIndex
         if #above < limit then
             below = redis.call('ZRANGE', KEYS[2], ARGV[1], '+inf', 'BYSCORE', 'LIMIT', 0, limit - #above)
         end
-        if #above > 0 then redis.call('ZREM', KEYS[1], unpack(above)) end
-        if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
         local hits, inflight = {}, {}
         for _, id in ipairs(above) do
             hits[#hits + 1] = id
@@ -67,7 +65,11 @@ final class RedisAlertIndex implements AlertIndex
             inflight[#inflight + 1] = ARGV[2]
             inflight[#inflight + 1] = id .. ':' .. ARGV[1]
         end
+        -- Park the hits before removing them: a failure here leaves them in
+        -- both places (popped again next tick, harmless) rather than nowhere.
         if #inflight > 0 then redis.call('ZADD', KEYS[3], unpack(inflight)) end
+        if #above > 0 then redis.call('ZREM', KEYS[1], unpack(above)) end
+        if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
         return hits
         LUA;
 
@@ -164,6 +166,8 @@ final class RedisAlertIndex implements AlertIndex
         );
 
         if (! is_array($result)) {
+            $this->throwOnRedisError('pop');
+
             return null;
         }
 
@@ -223,7 +227,13 @@ final class RedisAlertIndex implements AlertIndex
             $count += count($members);
         }
 
-        $redis->eval(self::SWAP_SCRIPT, 5, self::KEY_ABOVE, self::KEY_BELOW, $aboveBuilding, $belowBuilding, self::KEY_READY);
+        $swapped = $redis->eval(self::SWAP_SCRIPT, 5, self::KEY_ABOVE, self::KEY_BELOW, $aboveBuilding, $belowBuilding, self::KEY_READY);
+
+        if ($swapped !== 1) {
+            $this->throwOnRedisError('swap');
+
+            throw new RuntimeException('Redis did not confirm the index swap.');
+        }
 
         return $count;
     }
@@ -271,6 +281,25 @@ final class RedisAlertIndex implements AlertIndex
             'received_at' => (string) self::nowMs(),
             'source' => $quote->source,
         ]);
+    }
+
+    /**
+     * phpredis answers an error reply with false, exactly like the script's own
+     * "not ready" sentinel; tell them apart so a real failure is never mistaken
+     * for an unbuilt index.
+     */
+    private function throwOnRedisError(string $script): void
+    {
+        $client = $this->redis()->client();
+        $error = $client->getLastError();
+
+        if ($error === null) {
+            return;
+        }
+
+        $client->clearLastError();
+
+        throw new RuntimeException(sprintf('Redis rejected the %s script: %s', $script, $error));
     }
 
     public static function keyFor(Direction $direction): string

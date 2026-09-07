@@ -13,6 +13,7 @@ use App\Providers\AppServiceProvider;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 use Tests\Concerns\UsesRedis;
 
 #[Group('redis')]
@@ -36,6 +37,19 @@ final class RedisAlertIndexTest extends AlertIndexContractTestCase
             ->sort()
             ->values()
             ->all());
+    }
+
+    #[Test]
+    public function a_redis_error_is_reported_rather_than_mistaken_for_an_unbuilt_index(): void
+    {
+        $this->index->rebuild([]);
+        $this->redis()->del(RedisAlertIndex::KEY_ABOVE);
+        $this->redis()->set(RedisAlertIndex::KEY_ABOVE, 'not a sorted set');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('WRONGTYPE');
+
+        $this->index->pop($this->quote('2700'), 10);
     }
 
     #[Test]

@@ -135,6 +135,21 @@ final class AlertMatcherTest extends TestCase
     }
 
     #[Test]
+    public function the_pop_batch_is_clamped_to_what_the_script_can_handle(): void
+    {
+        config()->set('gold.index.pop_batch', 5000);
+
+        foreach (range(1, AlertMatcher::MAX_POP_BATCH + 1) as $id) {
+            $this->index->add($id, Direction::Above, Price::fromDecimal('2700'));
+        }
+
+        $outcome = $this->matcher()->match($this->quote('2700'));
+
+        self::assertSame(AlertMatcher::MAX_POP_BATCH + 1, $outcome->matched);
+        self::assertSame(2, $outcome->batches);
+    }
+
+    #[Test]
     public function jobs_carry_the_quote_and_go_to_the_alerts_queue(): void
     {
         $this->index->add(1, Direction::Above, Price::fromDecimal('2700'));

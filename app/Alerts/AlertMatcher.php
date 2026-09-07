@@ -20,6 +20,12 @@ use Illuminate\Support\Facades\Log;
  */
 class AlertMatcher
 {
+    /**
+     * The pop script passes twice this many arguments to ZADD through Lua's
+     * unpack(), whose stack allows about 8000 slots; 1000 keeps a wide margin.
+     */
+    public const int MAX_POP_BATCH = 1000;
+
     public function __construct(
         private readonly AlertIndex $index,
         private readonly IndexRebuilder $rebuilder,
@@ -32,7 +38,7 @@ class AlertMatcher
      */
     public function match(PriceQuote $quote): MatchOutcome
     {
-        $limit = max(1, (int) $this->config->get('gold.index.pop_batch'));
+        $limit = min(self::MAX_POP_BATCH, max(1, (int) $this->config->get('gold.index.pop_batch')));
         $ids = [];
         $batches = 0;
         $rebuilt = false;
