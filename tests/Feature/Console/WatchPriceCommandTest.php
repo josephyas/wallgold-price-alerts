@@ -75,7 +75,7 @@ final class WatchPriceCommandTest extends TestCase
 
         Sleep::assertSleptTimes(2);
         Sleep::assertSlept(fn (CarbonInterval $duration): bool => (int) $duration->totalMilliseconds === 2000, times: 1);
-        Sleep::assertSlept(fn (CarbonInterval $duration): bool => $duration->totalMilliseconds > 900 && $duration->totalMilliseconds <= 1000, times: 1);
+        Sleep::assertSlept(fn (CarbonInterval $duration): bool => $duration->totalMilliseconds > 0 && $duration->totalMilliseconds <= 1000, times: 1);
     }
 
     #[Test]

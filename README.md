@@ -258,7 +258,7 @@ Tests marked `redis` exercise the real Lua scripts against a dedicated Redis dat
 
 What is covered: the value objects and direction rules; both index implementations through one shared contract (including the atomic pop, batching, in-flight tracking and rebuild); the providers with faked HTTP; the delivery job's every path (send once, missing row, failed row, stale entry, lost claim, abandoned claim, refused message, final failure); the matcher (gaps, bounces, sides, batching, rebuild); the watcher (single tick, failure, backoff); reconcile (each repair, and the idle-queue rule); the API (rules, ownership, throttling); and the end-to-end flow through the real HTTP layer and watcher command, against both indexes.
 
-PHPUnit cannot race two workers, so concurrency is proven differently: the atomic-pop test shows a second pop returns nothing, and the delivery tests show the conditional claim admits exactly one of two attempts.
+PHPUnit cannot race two workers, so concurrency is proven differently: the atomic-pop test shows a second pop returns nothing, and the delivery tests run a second job for the same alert while the first one holds the claim and is inside the mailer, showing that exactly one email goes out.
 
 ## Design decisions
 

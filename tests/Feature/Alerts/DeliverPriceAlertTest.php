@@ -59,7 +59,7 @@ final class DeliverPriceAlertTest extends TestCase
     }
 
     #[Test]
-    public function running_the_same_delivery_twice_sends_exactly_once(): void
+    public function a_second_run_after_delivery_finds_no_row_and_acknowledges(): void
     {
         Notification::fake();
         $alert = PriceAlert::factory()->above('2700')->create();
@@ -70,6 +70,24 @@ final class DeliverPriceAlertTest extends TestCase
 
         Notification::assertSentTimes(PriceAlertTriggered::class, 1);
         self::assertSame(0, $this->index->sizes()['inflight']);
+    }
+
+    #[Test]
+    public function two_jobs_contending_for_the_same_alert_send_exactly_once(): void
+    {
+        $alert = PriceAlert::factory()->above('2700')->create();
+        $quote = $this->popped($alert, '2701.25');
+        // The second job runs while the first one holds the claim and is inside the mailer.
+        $this->mock(MailChannel::class, function (MockInterface $mock) use ($alert, $quote): void {
+            $mock->shouldReceive('send')->once()->andReturnUsing(function () use ($alert, $quote): void {
+                $this->deliver(new DeliverPriceAlert($alert->id, $quote));
+            });
+        });
+
+        $this->deliver(new DeliverPriceAlert($alert->id, $quote));
+
+        $this->assertDatabaseMissing('price_alerts', ['id' => $alert->id]);
+        self::assertSame(0, $this->index->sizes()['inflight'], 'the winner acknowledged; the loser left it alone');
     }
 
     #[Test]
