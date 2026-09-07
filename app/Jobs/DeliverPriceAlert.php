@@ -23,13 +23,15 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 /**
- * Email one triggered alert exactly once, then delete it.
+ * Email one triggered alert, then delete it.
  *
  * The delivery is claimed with a single conditional UPDATE (active -> sending),
  * which is atomic on every supported database. Two jobs for the same alert,
  * whether from a retry, a reconcile re-dispatch or a second watcher, cannot
- * both win the claim, so the email is sent once. The claim is taken before
- * the send and the row is deleted after the mail server accepts the message.
+ * both win the claim, so the email is sent once per claim. The claim is taken
+ * before the send and the row is deleted after the mail server accepts the
+ * message; a worker that dies in between is re-driven by reconcile and may
+ * send a second time, the one duplicate path the design accepts.
  */
 #[Queue(DeliverPriceAlert::QUEUE)]
 #[Tries(3)]

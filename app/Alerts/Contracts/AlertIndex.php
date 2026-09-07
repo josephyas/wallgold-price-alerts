@@ -79,6 +79,11 @@ interface AlertIndex
      */
     public function sizes(): array;
 
+    /**
+     * The index also records the last quote, because the Redis pop script
+     * writes it in the same atomic call that takes the hits: the price the API
+     * shows is always the one the index was last matched against.
+     */
     public function currentPrice(): ?CurrentPrice;
 
     public function putCurrentPrice(PriceQuote $quote): void;

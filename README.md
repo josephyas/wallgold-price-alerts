@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/josephyas/wallgold-price-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/josephyas/wallgold-price-alerts/actions/workflows/ci.yml)
 
-A gold price alert service on Laravel 13. A user registers a target price; when the global gold price reaches or crosses it, the user is emailed the new price **once** and the alert is deleted. The design goal is the lowest possible delay between the price tick and the email, with exactly-once delivery under concurrency and failure.
+A gold price alert service on Laravel 13. A user registers a target price; when the global gold price reaches or crosses it, the user is emailed the new price **once** and the alert is deleted. The design goal is the lowest possible delay between the price tick and the email, with exactly-once delivery under concurrency and at-least-once across a worker crash mid-send (the one documented duplicate path).
 
 The service is API-only. The price feed and the mailer are behind interfaces and mocked by default: a seeded random walk stands in for the feed, and Mailpit (or the log) receives the mail.
 
@@ -54,11 +54,11 @@ TOKEN=$(make -s token)
 AUTH=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -H 'Content-Type: application/json')
 
 curl -s localhost:8000/api/price "${AUTH[@]}"                                   # current price, around 2650
-curl -s -X POST localhost:8000/api/alerts "${AUTH[@]}" -d '{"target_price":"2700"}'   # 201, direction "above" inferred
+ID=$(curl -s -X POST localhost:8000/api/alerts "${AUTH[@]}" -d '{"target_price":"2700"}' | sed -E 's/.*"id":([0-9]+).*/\1/')   # 201, direction "above" inferred
 make push PRICES="2690 2701.25"                                                 # walk the price across the alert
 make watch                                                                      # "... price=2701.2500 ... matched=1"
 open http://localhost:8025                                                      # "Gold price alert: 2,700.00 USD/oz reached"
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/3 "${AUTH[@]}"   # 404: delivered alerts are deleted
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/$ID "${AUTH[@]}"   # 404: delivered alerts are deleted
 make push PRICES="2702"                                                         # nothing fires again
 ```
 
@@ -133,7 +133,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 -- ... every hit is added to the in-flight set with the tick time as score, then returned
 ```
 
-`false` means the index has not been built since Redis last started; the matcher rebuilds it from the database and pops again.
+`false` means the index has not been built since Redis last lost its data; the matcher rebuilds it from the database and pops again. A Redis error reply is told apart from that sentinel and raised with its message.
 
 ## Guarantees
 
@@ -145,7 +145,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 | Worker dies after the mail server accepted the message but before the row was deleted | Same re-drive: the user may receive the email twice. A rare duplicate beats a silent miss for a price alert, and this is the only path to a duplicate. |
 | The mail server refuses the message (or anything fails before it accepts) | The claim is released back to `active` and the job is retried after 5 s and again after 30 s; after the third failure the alert is marked `failed` for the user to see. |
 | Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
-| Redis restarts or is flushed | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. |
+| Redis loses its data (flushed, or restarted without persistence) | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. With the Compose setup Redis persists to an append-only file, so a plain restart keeps the index; writes lost in the last fsync window are found missing and added back by reconcile within a minute. |
 | Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile finds the row missing from the index within a minute and adds it back. `GET /api/price` answers 503 meanwhile. |
 | The user cancels while the alert is being delivered | The conditional delete refuses with 409 until the delivery finishes (and deletes the row itself). |
 | The price gaps over several targets in one tick | All of them fire, each once. |
@@ -196,6 +196,9 @@ Redis keys (with the configured prefix):
 | `alerts:ready` | string | exists once the index was built from the database |
 | `price:current` | hash | last quote: price, observed_at, received_at, source |
 | `price:fake:queue` | list | scripted prices for the fake feed |
+| `alerts:above:building`, `alerts:below:building` | sorted set | temporary sets a rebuild fills before swapping them in |
+
+The rebuild also takes a `price-alerts:index:rebuild` lock in the cache store so concurrent rebuilds wait for one another.
 
 ## Configuration
 
@@ -205,8 +208,9 @@ Redis keys (with the configured prefix):
 | `GOLD_PRICE_UNIT` | `USD/oz` | label shown in emails and the API |
 | `GOLD_POLL_INTERVAL_MS` | `1000` | watcher interval, minimum 100 |
 | `GOLD_PRICE_MAX_AGE_MS` | `10000` | a recorded price older than this counts as unknown |
-| `GOLD_FAKE_START`, `GOLD_FAKE_MAX_STEP`, `GOLD_FAKE_SEED` | `2650.00`, `2.00`, empty | fake feed parameters |
-| `GOLD_API_URL`, `GOLD_API_TOKEN`, `GOLD_API_TIMEOUT` | goldapi.io XAU/USD, empty, `2.0` | real feed |
+| `GOLD_FAKE_START`, `GOLD_FAKE_MAX_STEP`, `GOLD_FAKE_SEED` | `2650.00`, `2.00`, empty | fake feed start, maximum move per tick, and seed (an integer makes the walk repeatable; empty means a fresh walk each start) |
+| `GOLDAPI_URL`, `GOLDAPI_TOKEN`, `GOLDAPI_TIMEOUT` | goldapi.io XAU/USD, empty, `2.0` | real feed |
+| `GOLD_REDIS_CONNECTION` | `default` | Redis connection (from `config/database.php`) holding the index and the fake-feed queue |
 | `GOLD_INDEX_POP_BATCH` | `1000` | alerts popped per Lua call (keep at or under 1000) |
 | `GOLD_INDEX_DISPATCH_BATCH` | `1000` | jobs per pipelined push |
 | `GOLD_INDEX_INFLIGHT_TTL_SECONDS` | `600` | popped alerts older than this with an idle queue are dispatched again |
@@ -216,7 +220,7 @@ Redis keys (with the configured prefix):
 | `REDIS_QUEUE_BLOCK_FOR` | `5` | seconds a worker blocks on `BLPOP` |
 | `REDIS_QUEUE_RETRY_AFTER` | `90` | must exceed the job timeout (60) |
 
-The Redis index requires the phpredis client (`REDIS_CLIENT=phpredis`, the default).
+`.env.example` lists the common variables; anything absent from `.env` falls back to the defaults in `config/gold.php`. The Redis index requires the phpredis client (`REDIS_CLIENT=phpredis`, the default).
 
 ## API
 
@@ -244,7 +248,7 @@ Validation failures and rule violations (equal to the current price, would trigg
 - **`php artisan price:fake-push 2690 2701.25`** steers the fake feed.
 - **Failed deliveries** show up as `status: failed` in the API with `last_error`; `php artisan queue:failed` lists the underlying jobs.
 - **Logs** carry alert ids and prices, never email addresses.
-- **Production notes.** The image installs dev dependencies so the suite can run inside it; build with `composer install --no-dev` for production. `artisan serve` is a development server; put nginx and php-fpm, or Octane, in front of the API for real traffic. Nothing in the pipeline depends on the web server.
+- **Production notes.** The image installs dev dependencies so the suite can run inside it; build with `composer install --no-dev` for production. `artisan serve` is a development server; put nginx and php-fpm, or Octane, in front of the API for real traffic, and configure trusted proxies in `bootstrap/app.php` so rate limits key on the client address rather than the proxy's. Nothing in the pipeline depends on the web server.
 
 ## Testing
 
