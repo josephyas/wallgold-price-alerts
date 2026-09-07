@@ -21,15 +21,4 @@ final readonly class PriceQuote
     {
         return (int) $this->observedAt->getPreciseTimestamp(3);
     }
-
-    /**
-     * Whether the observation is older than the given age, measured against
-     * an explicit "now" so callers (and tests) control the clock.
-     */
-    public function isOlderThan(int $maxAgeMs, ?int $nowMs = null): bool
-    {
-        $nowMs ??= (int) CarbonImmutable::now()->getPreciseTimestamp(3);
-
-        return $nowMs - $this->observedAtMs() > $maxAgeMs;
-    }
 }

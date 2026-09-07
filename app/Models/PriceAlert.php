@@ -88,20 +88,6 @@ class PriceAlert extends Model
         $query->where('status', AlertStatus::Active);
     }
 
-    /**
-     * @param  Builder<PriceAlert>  $query
-     */
-    #[Scope]
-    protected function ownedBy(Builder $query, User $user): void
-    {
-        $query->where('user_id', $user->getKey());
-    }
-
-    public function isActive(): bool
-    {
-        return $this->status === AlertStatus::Active;
-    }
-
     /** Whether the given price satisfies this alert's level and side. */
     public function isHitBy(Price $price): bool
     {

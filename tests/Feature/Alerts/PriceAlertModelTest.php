@@ -62,17 +62,15 @@ final class PriceAlertModelTest extends TestCase
         PriceAlert::factory()->failed()->create();
 
         self::assertSame([$active->id], PriceAlert::query()->active()->pluck('id')->all());
-        self::assertTrue($active->isActive());
     }
 
     #[Test]
-    public function the_owned_by_scope_limits_alerts_to_one_user(): void
+    public function alerts_belong_to_their_user(): void
     {
         $owner = User::factory()->create();
         $mine = PriceAlert::factory()->for($owner)->create();
         PriceAlert::factory()->create();
 
-        self::assertSame([$mine->id], PriceAlert::query()->ownedBy($owner)->pluck('id')->all());
         self::assertSame([$mine->id], $owner->priceAlerts()->pluck('id')->all());
         self::assertTrue($mine->user->is($owner));
     }

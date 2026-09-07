@@ -95,16 +95,6 @@ final readonly class Price implements JsonSerializable, Stringable
         return $this->minor <= $other->minor;
     }
 
-    public function isAbove(self $other): bool
-    {
-        return $this->minor > $other->minor;
-    }
-
-    public function isBelow(self $other): bool
-    {
-        return $this->minor < $other->minor;
-    }
-
     public function jsonSerialize(): string
     {
         return $this->toDecimal();

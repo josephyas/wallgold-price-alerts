@@ -103,8 +103,6 @@ final class PriceTest extends TestCase
         self::assertSame(1, $high->compare($low));
         self::assertSame(0, $low->compare(Price::fromMinor($low->minor)));
 
-        self::assertTrue($low->isBelow($high));
-        self::assertTrue($high->isAbove($low));
         self::assertTrue($low->isAtMost($high));
         self::assertTrue($low->isAtMost($low));
         self::assertTrue($high->isAtLeast($low));

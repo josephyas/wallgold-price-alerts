@@ -21,17 +21,6 @@ final class PriceQuoteTest extends TestCase
     }
 
     #[Test]
-    public function it_knows_when_it_is_stale(): void
-    {
-        $observedAt = CarbonImmutable::parse('2026-09-07 12:00:00', 'UTC');
-        $quote = new PriceQuote(Price::fromDecimal('2650'), $observedAt, 'fake');
-        $observedMs = $quote->observedAtMs();
-
-        self::assertFalse($quote->isOlderThan(10_000, $observedMs + 10_000));
-        self::assertTrue($quote->isOlderThan(10_000, $observedMs + 10_001));
-    }
-
-    #[Test]
     public function it_survives_serialisation_for_queued_jobs(): void
     {
         $quote = new PriceQuote(Price::fromDecimal('2701.25'), CarbonImmutable::parse('2026-09-07 12:00:00', 'UTC'), 'fake');
