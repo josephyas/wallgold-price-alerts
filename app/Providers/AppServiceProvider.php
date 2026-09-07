@@ -12,11 +12,14 @@ use App\Pricing\Price;
 use App\Pricing\Providers\FakePriceProvider;
 use App\Pricing\Providers\GoldApiPriceProvider;
 use App\Pricing\Providers\RedisScriptedPrices;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Factory as Http;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -64,5 +67,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Model::shouldBeStrict(! $this->app->isProduction());
+
+        RateLimiter::for('api', fn (Request $request): Limit => Limit::perMinute((int) config('gold.api_rate_per_minute'))
+            ->by((string) ($request->user('sanctum')?->getAuthIdentifier() ?? $request->ip())));
     }
 }

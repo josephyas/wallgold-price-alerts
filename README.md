@@ -74,3 +74,16 @@ A message the mail server refuses puts the alert back to `active` and lets the q
 The interval is bounded by the provider: the fake feed is comfortable at a few hundred milliseconds, while real HTTP APIs usually allow far fewer calls. A streaming provider would be the upgrade path for sub-second latency.
 
 `php artisan price:fake-push 2690 2701.25` steers the fake feed to exact values on its next ticks, which is how the demo walks a price across an alert.
+
+## API
+
+All endpoints live under `/api`, speak JSON, and are rate limited (`GOLD_API_RATE_PER_MINUTE` per user, 10 per minute for the authentication endpoints). Authentication uses Sanctum bearer tokens.
+
+| Method and path | Auth | Body | Response |
+|---|---|---|---|
+| `POST /api/auth/register` | none | `name`, `email`, `password`, optional `device_name` | 201 `{token, token_type, user}` |
+| `POST /api/auth/token` | none | `email`, `password`, optional `device_name` | 200 `{token, token_type}` |
+| `GET /api/auth/me` | token | | 200 `{data: {id, name, email}}` |
+| `DELETE /api/auth/logout` | token | | 204, revokes the current token |
+
+Validation failures return 422 with an `errors` object; missing or revoked tokens return 401; exceeding a limit returns 429.

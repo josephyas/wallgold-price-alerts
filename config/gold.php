@@ -65,6 +65,15 @@ return [
         'stale_after_seconds' => (int) env('GOLD_DELIVERY_STALE_AFTER_SECONDS', 120),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | API limits
+    |--------------------------------------------------------------------------
+    */
+
+    // Requests per minute per user (or per IP before authentication).
+    'api_rate_per_minute' => (int) env('GOLD_API_RATE_PER_MINUTE', 60),
+
     'goldapi' => [
         'url' => env('GOLD_API_URL', 'https://www.goldapi.io/api/XAU/USD'),
         'token' => env('GOLD_API_TOKEN', ''),
