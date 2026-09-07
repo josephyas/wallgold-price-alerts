@@ -10,10 +10,14 @@ Requirements: Docker with Compose v2. Everything else runs in containers.
 
 ```bash
 make up          # builds the image, writes .env with an application key, starts the stack
-make logs        # follow all services
+make watch       # follow the watcher: one line per price tick
+make token       # bearer token for the seeded demo user (demo@example.com / password)
+make push PRICES="2690 2701.25"   # steer the fake feed to exact prices
 make test        # run the test suite inside the container
 make down        # stop the stack (data volumes are kept)
 ```
+
+The stack is seven containers: the API, one price watcher, one queue worker (`docker compose up -d --scale worker=4` for more), the scheduler, Redis, MySQL and Mailpit, plus a one-shot migrate-and-seed service the others wait for. The seed creates the demo user and two alerts far from the current price.
 
 Without `make`, the equivalent is:
 

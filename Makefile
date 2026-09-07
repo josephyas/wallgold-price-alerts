@@ -1,6 +1,9 @@
 COMPOSE ?= docker compose
 
-.PHONY: up down build logs shell test
+APP_PORT ?= 8000
+PRICES ?= 2690 2701.25
+
+.PHONY: up down build logs watch shell test token push
 
 ## Build the image, create .env with an application key if needed, start everything.
 up: .env
@@ -21,8 +24,21 @@ build:
 logs:
 	$(COMPOSE) logs -f --tail=100
 
+## Follow the watcher: one line per price tick.
+watch:
+	$(COMPOSE) logs -f --tail=20 watcher
+
 shell:
 	$(COMPOSE) exec app sh
+
+## Print a bearer token for the seeded demo user.
+token:
+	@curl -s -X POST localhost:$(APP_PORT)/api/auth/token -H 'Accept: application/json' -H 'Content-Type: application/json' \
+		-d '{"email":"demo@example.com","password":"password","device_name":"make"}' | sed -E 's/.*"token":"([^"]+)".*/\1/'
+
+## Steer the fake price feed, e.g. make push PRICES="2690 2701.25"
+push:
+	$(COMPOSE) exec -T app php artisan price:fake-push $(PRICES)
 
 ## Run the test suite inside the container (SQLite in memory, Redis from the stack when running).
 test: .env

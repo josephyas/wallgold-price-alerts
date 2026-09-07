@@ -50,6 +50,23 @@ services:
       retries: 5
       start_period: 10s
 
+  # One watcher polls the feed and pops the index; scale workers as the mail
+  # volume requires (docker compose up -d --scale worker=4).
+  watcher:
+    <<: *app
+    command: ["php", "artisan", "price:watch", "-v"]
+    depends_on: *depends
+
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "redis", "--queue=alerts,default", "--sleep=0.1", "--tries=3", "--timeout=60", "--max-time=3600"]
+    depends_on: *depends
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    depends_on: *depends
+
   redis:
     image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/library/redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
