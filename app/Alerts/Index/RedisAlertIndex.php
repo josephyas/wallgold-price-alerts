@@ -238,6 +238,11 @@ final class RedisAlertIndex implements AlertIndex
         return $count;
     }
 
+    public function purge(): void
+    {
+        $this->redis()->del(self::KEY_ABOVE, self::KEY_BELOW, self::KEY_INFLIGHT, self::KEY_READY);
+    }
+
     public function isReady(): bool
     {
         return (int) $this->redis()->exists(self::KEY_READY) === 1;

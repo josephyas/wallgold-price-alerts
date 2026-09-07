@@ -72,6 +72,13 @@ interface AlertIndex
      */
     public function rebuild(iterable $entries): int;
 
+    /**
+     * Drop the level sets and every in-flight entry, and mark the index not
+     * ready. The recorded current price is left alone; it belongs to the feed,
+     * not to the index of alerts.
+     */
+    public function purge(): void;
+
     public function isReady(): bool;
 
     /**

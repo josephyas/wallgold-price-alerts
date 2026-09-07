@@ -39,4 +39,9 @@ final class RedisScriptedPrices implements ScriptedPrices
             ...array_map(fn (Price $price): string => $price->toDecimal(), $prices),
         );
     }
+
+    public function clear(): void
+    {
+        $this->redis->connection($this->connection)->del(self::KEY);
+    }
 }

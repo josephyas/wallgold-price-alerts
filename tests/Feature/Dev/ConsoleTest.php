@@ -157,6 +157,28 @@ final class ConsoleTest extends TestCase
     }
 
     #[Test]
+    public function resetting_clears_everything_the_console_created(): void
+    {
+        $index = $this->app->make(AlertIndex::class);
+        $alert = PriceAlert::factory()->above('2700')->create();
+        PriceAlert::factory()->failed()->below('2500')->create();
+        $index->add($alert->id, $alert->direction, $alert->target_price);
+        $this->app->make(ScriptedPrices::class)->push(Price::fromDecimal('2690'));
+        $index->putCurrentPrice(new PriceQuote(Price::fromDecimal('2650'), CarbonImmutable::now(), 'fake'));
+
+        $this->postJson('/dev/reset')
+            ->assertOk()
+            ->assertJsonPath('alerts', 2)
+            ->assertJsonPath('mail', true);
+
+        self::assertSame(0, PriceAlert::query()->count());
+        self::assertSame(['above' => 0, 'below' => 0, 'inflight' => 0], $index->sizes());
+        self::assertNull($this->app->make(ScriptedPrices::class)->pull());
+        self::assertTrue($index->isReady(), 'the index is rebuilt empty, not left unbuilt');
+        self::assertNotNull($index->currentPrice(), 'the market price is not part of the reset');
+    }
+
+    #[Test]
     public function the_inbox_can_be_cleared(): void
     {
         Http::fake(['*/api/v1/messages*' => Http::response([], 200)]);

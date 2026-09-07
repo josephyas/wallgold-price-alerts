@@ -22,4 +22,5 @@ Route::middleware(DevConsoleOnly::class)->prefix('dev')->name('dev.')->group(fun
     Route::post('alerts', [ConsoleController::class, 'createAlert'])->name('alerts.store');
     Route::delete('alerts/{alert}', [ConsoleController::class, 'deleteAlert'])->name('alerts.destroy');
     Route::post('inbox/clear', [ConsoleController::class, 'clearInbox'])->name('inbox.clear');
+    Route::post('reset', [ConsoleController::class, 'reset'])->name('reset');
 });

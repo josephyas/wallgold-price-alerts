@@ -8,6 +8,7 @@ use App\Alerts\Actions\CancelPriceAlert;
 use App\Alerts\Actions\CreatePriceAlert;
 use App\Alerts\Contracts\AlertIndex;
 use App\Alerts\Direction;
+use App\Alerts\IndexRebuilder;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeliverPriceAlert;
 use App\Models\PriceAlert;
@@ -16,6 +17,7 @@ use App\Pricing\Contracts\ScriptedPrices;
 use App\Pricing\Price;
 use App\Pricing\Rules\ValidPrice;
 use App\Support\MailpitInbox;
+use Illuminate\Contracts\Queue\ClearableQueue;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -101,6 +103,45 @@ final class ConsoleController extends Controller
         $action->cancel($alert);
 
         return response()->noContent();
+    }
+
+    /**
+     * Start from nothing: every alert, queued job, failed job, index entry,
+     * scripted price and delivered mail. The recorded market price is left
+     * alone, because it belongs to the feed rather than to anything the
+     * console created.
+     */
+    public function reset(
+        AlertIndex $index,
+        IndexRebuilder $rebuilder,
+        QueueFactory $queue,
+        ScriptedPrices $script,
+        MailpitInbox $inbox,
+    ): JsonResponse {
+        $alerts = PriceAlert::query()->count();
+        PriceAlert::query()->delete();
+
+        $failed = DB::table('failed_jobs')->delete();
+
+        $connection = $queue->connection();
+        $queued = $connection instanceof ClearableQueue
+            ? $connection->clear(DeliverPriceAlert::QUEUE)
+            : 0;
+
+        try {
+            $script->clear();
+            $index->purge();
+            $rebuilder->rebuild();
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return response()->json([
+            'alerts' => $alerts,
+            'queued' => $queued,
+            'failed' => $failed,
+            'mail' => $inbox->clear(),
+        ]);
     }
 
     public function clearInbox(MailpitInbox $inbox): JsonResponse

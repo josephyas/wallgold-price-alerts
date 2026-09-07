@@ -136,6 +136,14 @@ final class InMemoryAlertIndex implements AlertIndex
         return count($this->above) + count($this->below);
     }
 
+    public function purge(): void
+    {
+        $this->above = [];
+        $this->below = [];
+        $this->inflight = [];
+        $this->ready = false;
+    }
+
     public function isReady(): bool
     {
         return $this->ready;

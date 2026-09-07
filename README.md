@@ -252,8 +252,12 @@ the system work without a terminal:
 - **Pipeline counters**: index sizes above and below, in-flight deliveries, queue depth and failed jobs.
 - **Delivered mail** read from Mailpit, with a clear button.
 - **Controls** to push exact prices, run an auto-push that drifts the feed up, down or at random, and create alerts.
-- **End-to-end test** that creates an alert above the current price, walks the feed across it, waits for the email,
-  then checks the alert deleted itself and does not fire twice, reporting each step with its own timing.
+- **End-to-end test** that creates an alert, walks the feed across it, waits for the email, then checks the alert
+  deleted itself and does not fire twice, reporting each step with its own timing. It can run once or **loop**, with
+  pause, resume and stop, a pass/fail tally, an average duration and a strip of recent runs. Looped runs alternate
+  between above and below, so the price oscillates instead of drifting away.
+- **Reset** that deletes every alert, empties the queue, the failed jobs, the index and the inbox, and drops queued
+  scripted prices, behind a confirmation. The live market price is left alone.
 
 The console exposes unauthenticated write endpoints, so a middleware refuses every one of its routes in production
 regardless of configuration; `GOLD_DEV_CONSOLE=false` switches it off anywhere else. It acts as the seeded demo

@@ -8,403 +8,478 @@
 <title>Alert Engine Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 @verbatim
 <style>
+  /*
+   * Brass instrument panel. The subject is gold, so the palette is metals:
+   * brass for the live price, patina for what passed, copper for what is in
+   * flight, iron for what failed. One hue per meaning, never two.
+   */
   :root {
-    --bg:            #0F172A;
-    --surface:       #1E293B;
-    --surface-2:     #172033;
-    --muted:         #272F42;
-    --border:        #334155;
-    --border-strong: #475569;
-    --fg:            #F8FAFC;
-    --fg-2:          #CBD5E1;
-    --fg-muted:      #94A3B8;
-    --accent:        #22C55E;
-    --accent-dim:    rgba(34, 197, 94, .13);
-    --sky:           #38BDF8;
-    --sky-dim:       rgba(56, 189, 248, .13);
-    --amber:         #FBBF24;
-    --amber-dim:     rgba(251, 191, 36, .13);
-    --red:           #EF4444;
-    --red-dim:       rgba(239, 68, 68, .13);
+    --ground:   #14110C;
+    --panel:    #1C1811;
+    --panel-2:  #241F16;
+    --inset:    #100D09;
+    --rule:     #33291C;
+    --rule-2:   #4A3B27;
+    --ink:      #F2E9D8;
+    --ink-2:    #C4B49A;
+    --ink-3:    #91816A;
+    --brass:    #E0A93B;
+    --brass-2:  #F3CE7E;
+    --brass-dim: rgba(224, 169, 59, .13);
+    --patina:   #55B892;
+    --patina-dim: rgba(85, 184, 146, .13);
+    --copper:   #E68544;
+    --copper-dim: rgba(230, 133, 68, .13);
+    --iron:     #E06453;
+    --iron-dim: rgba(224, 100, 83, .13);
 
-    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'Chivo', -apple-system, 'Helvetica Neue', Arial, sans-serif;
 
-    --r-card: 10px;
-    --r-ctl: 7px;
+    --r: 4px;
+    --ease: cubic-bezier(.2, .7, .3, 1);
     color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
-  /* A display rule on a class would otherwise beat the hidden attribute. */
   [hidden] { display: none !important; }
 
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: var(--sans);
-    font-size: 15px;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13.5px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
 
-  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  p, .prose { font-family: var(--sans); }
+
+  .lbl {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
 
   /* ------------------------------------------------------------- header */
 
-  header {
+  .top {
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(15, 23, 42, .92);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
+    background: linear-gradient(var(--panel), #191509);
+    border-bottom: 1px solid var(--rule-2);
   }
-  .bar {
-    max-width: 1400px;
+  .top-in {
+    max-width: 1460px;
     margin: 0 auto;
-    padding: 12px 24px;
+    padding: 12px 22px;
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 26px;
     flex-wrap: wrap;
   }
-  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
-  .brand svg { width: 20px; height: 20px; color: var(--accent); }
-  .brand h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  .brand span { font-size: 12px; color: var(--fg-muted); }
+  .brand { display: flex; align-items: center; gap: 11px; margin-right: auto; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    border: 1px solid var(--brass);
+    border-radius: 2px;
+    display: grid; place-items: center;
+    color: var(--brass);
+    background: var(--brass-dim);
+    flex: none;
+  }
+  .brand-mark svg { width: 17px; height: 17px; }
+  .brand b { display: block; font-family: var(--sans); font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
 
-  .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-2); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-muted); flex: none; }
-  .dot.live { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); animation: pulse 2s ease-in-out infinite; }
-  .dot.warn { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim); }
-  .dot.down { background: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+  .readout {
+    position: relative;
+    padding: 5px 16px;
+    background: var(--inset);
+    border: 1px solid var(--rule-2);
+    border-radius: 2px;
+    display: flex;
+    align-items: baseline;
+    gap: 11px;
+  }
+  .readout::before, .readout::after {
+    content: '';
+    position: absolute;
+    width: 8px; height: 8px;
+    border: 1px solid var(--brass);
+    opacity: .65;
+  }
+  .readout::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  .readout::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+  .readout .v {
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--brass);
+    text-shadow: 0 0 18px rgba(224, 169, 59, .3);
+  }
+  .readout .u { font-size: 10.5px; letter-spacing: .1em; color: var(--ink-3); text-transform: uppercase; }
+  .readout .d { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .d.up { color: var(--patina); }
+  .d.down { color: var(--iron); }
+  .d.flat { color: var(--ink-3); }
 
-  .price-now { display: flex; align-items: baseline; gap: 10px; }
-  .price-now .v { font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .price-now .u { font-size: 12px; color: var(--fg-muted); }
-  .price-now .d { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
-  .d.up { color: var(--accent); }
-  .d.down { color: var(--red); }
-  .d.flat { color: var(--fg-muted); }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); flex: none; }
+  .dot.live { background: var(--patina); box-shadow: 0 0 0 3px var(--patina-dim); animation: pulse 2.2s var(--ease) infinite; }
+  .dot.warn { background: var(--copper); box-shadow: 0 0 0 3px var(--copper-dim); }
+  .dot.down { background: var(--iron); box-shadow: 0 0 0 3px var(--iron-dim); }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }
 
   /* --------------------------------------------------------------- grid */
 
   main {
-    max-width: 1400px;
+    max-width: 1460px;
     margin: 0 auto;
-    padding: 24px;
+    padding: 22px;
     display: grid;
-    grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1.85fr) minmax(330px, 1fr);
+    gap: 18px;
     align-items: start;
   }
-  .col { display: grid; gap: 20px; align-content: start; min-width: 0; }
+  /* The implicit track must be minmax(0,1fr): an auto track sizes to
+     max-content, and the chart SVG's intrinsic width would then push panels
+     wider than the column and scroll the page sideways. */
+  .col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; min-width: 0; }
 
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-card);
-    overflow: hidden;
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: var(--r);
+    min-width: 0;
   }
-  .card > header {
-    position: static;
-    background: none;
-    backdrop-filter: none;
-    border-bottom: 1px solid var(--border);
-    padding: 13px 16px;
+  .panel > .head {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--rule);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 9px;
+    background: linear-gradient(var(--panel-2), var(--panel));
+    border-radius: var(--r) var(--r) 0 0;
   }
-  .card > header h2 {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0;
-    letter-spacing: 0.01em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .card > header h2 svg { width: 15px; height: 15px; color: var(--fg-muted); }
-  .card > header .spacer { margin-left: auto; }
-  .card .body { padding: 16px; }
-  .card .body.flush { padding: 0; }
+  .panel > .head h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-2); }
+  .panel > .head svg.ico { width: 14px; height: 14px; color: var(--brass); flex: none; }
+  .panel > .head .sp { margin-left: auto; }
+  .panel .pad { padding: 14px; }
+  .meta { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
   /* ------------------------------------------------------------ controls */
 
   button {
-    font-family: inherit;
-    font-size: 13.5px;
+    font-family: var(--mono);
+    font-size: 12px;
     font-weight: 500;
-    color: var(--fg);
-    background: var(--muted);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-ctl);
-    padding: 0 14px;
-    min-height: 38px;
+    letter-spacing: .04em;
+    color: var(--ink);
+    background: var(--panel-2);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    padding: 0 13px;
+    min-height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 7px;
     cursor: pointer;
-    transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+    transition: background 150ms var(--ease), border-color 150ms var(--ease), color 150ms var(--ease);
   }
-  button svg { width: 15px; height: 15px; flex: none; }
-  button:hover:not(:disabled) { background: #313B52; border-color: #5A6480; }
-  button:active:not(:disabled) { background: #3A4359; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #06240F; font-weight: 600; }
-  button.primary:hover:not(:disabled) { background: #34D06A; border-color: #34D06A; }
-  button.danger { color: var(--red); }
-  button.danger:hover:not(:disabled) { background: var(--red-dim); border-color: var(--red); }
-  button.on { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-  button.icon { min-width: 38px; padding: 0 9px; }
-  button.sm { min-height: 32px; font-size: 12.5px; padding: 0 10px; }
+  button svg { width: 14px; height: 14px; flex: none; }
+  button:hover:not(:disabled) { background: #2E2718; border-color: var(--ink-3); }
+  button:active:not(:disabled) { background: #382F1D; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
 
-  :is(button, input, select, a):focus-visible {
-    outline: 2px solid var(--accent);
+  button.key { background: var(--brass); border-color: var(--brass); color: #1B1305; font-weight: 600; }
+  button.key:hover:not(:disabled) { background: var(--brass-2); border-color: var(--brass-2); }
+  button.on { background: var(--brass-dim); border-color: var(--brass); color: var(--brass); }
+  button.warnish { color: var(--copper); border-color: rgba(230,133,68,.4); }
+  button.warnish:hover:not(:disabled) { background: var(--copper-dim); border-color: var(--copper); }
+  button.risky { color: var(--iron); border-color: rgba(224,100,83,.4); }
+  button.risky:hover:not(:disabled) { background: var(--iron-dim); border-color: var(--iron); }
+  button.risky-solid { background: var(--iron); border-color: var(--iron); color: #2A0E0A; font-weight: 600; }
+  button.risky-solid:hover:not(:disabled) { background: #EA7565; border-color: #EA7565; }
+  button.sm { min-height: 30px; font-size: 11px; padding: 0 9px; }
+  button.ico-only { min-width: 30px; padding: 0 8px; }
+  button.wide { width: 100%; }
+
+  :is(button, input, select, a, dialog):focus-visible {
+    outline: 2px solid var(--brass);
     outline-offset: 2px;
   }
 
-  label { display: block; font-size: 12px; font-weight: 500; color: var(--fg-2); margin-bottom: 6px; }
-  .hint { font-size: 11.5px; color: var(--fg-muted); margin-top: 6px; }
+  label { display: block; margin-bottom: 5px; }
+  .hint { font-family: var(--sans); font-size: 11.5px; color: var(--ink-3); margin: 6px 0 0; line-height: 1.45; }
 
   input, select {
     font-family: var(--mono);
-    font-size: 13.5px;
+    font-size: 12.5px;
     font-variant-numeric: tabular-nums;
-    color: var(--fg);
-    background: var(--surface-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-ctl);
-    padding: 0 11px;
-    min-height: 38px;
+    color: var(--ink);
+    background: var(--inset);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    padding: 0 10px;
+    min-height: 36px;
     width: 100%;
-    transition: border-color 160ms ease;
+    transition: border-color 150ms var(--ease);
   }
-  select { font-family: var(--sans); cursor: pointer; }
-  input:hover, select:hover { border-color: #5A6480; }
-  input::placeholder { color: #64748B; }
+  select { cursor: pointer; }
+  input:hover, select:hover { border-color: var(--ink-3); }
+  input::placeholder { color: #6B5C46; }
 
-  .field + .field { margin-top: 13px; }
-  .row { display: flex; gap: 9px; align-items: flex-end; }
-  .row > .field { flex: 1; margin-top: 0; }
-  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .fld + .fld { margin-top: 12px; }
+  .inline { display: flex; gap: 8px; align-items: flex-end; }
+  .inline > .fld { flex: 1; margin-top: 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+  /* Side-by-side fields are siblings, so the stacking margin above would
+     otherwise drop the right-hand control by 12px. */
+  .two > .fld { margin-top: 0; }
+  /* Labels wrap to two lines at some widths; keep both controls on one line. */
+  .two > .fld > label { min-height: 1.2em; }
 
   /* --------------------------------------------------------------- chart */
 
-  .chart-wrap { padding: 8px 4px 0; }
-  .chart-wrap svg { display: block; width: 100%; height: auto; }
-  .chart-legend {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    padding: 6px 16px 14px;
-    font-size: 11.5px;
-    color: var(--fg-muted);
+  .scan { position: relative; }
+  .scan::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(180deg, rgba(224,169,59,.04) 0 1px, transparent 1px 3px);
+    pointer-events: none;
   }
-  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .swatch { width: 14px; height: 2px; border-radius: 1px; flex: none; }
-  .swatch.line { background: var(--accent); }
-  .swatch.target { background: var(--sky); height: 0; border-top: 2px dashed var(--sky); }
+  #chart-svg { display: block; padding: 6px 2px 0; cursor: crosshair; }
+  #chart-svg svg { display: block; width: 100%; max-width: 100%; height: auto; }
+  .legend {
+    display: flex; gap: 15px; flex-wrap: wrap;
+    padding: 4px 14px 12px;
+    font-size: 10.5px; color: var(--ink-3);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 13px; height: 2px; flex: none; }
+  .sw.a { background: var(--brass); }
+  .sw.b { border-top: 2px dashed var(--patina); }
 
-  .empty {
-    padding: 34px 16px;
+  .none {
+    padding: 30px 14px;
     text-align: center;
-    color: var(--fg-muted);
-    font-size: 13px;
+    color: var(--ink-3);
+    font-family: var(--sans);
+    font-size: 12.5px;
   }
-  .empty svg { width: 22px; height: 22px; margin-bottom: 8px; opacity: .55; }
+  .none svg { width: 20px; height: 20px; opacity: .5; margin-bottom: 6px; }
 
   /* --------------------------------------------------------------- table */
 
-  .scroll-x { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .xscroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 13px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
   th {
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--fg-muted);
-    font-weight: 500;
-    background: var(--surface-2);
-    position: sticky;
-    top: 0;
+    font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500; background: var(--inset);
+    position: sticky; top: 0;
   }
   tbody tr:last-child td { border-bottom: none; }
-  tbody tr { transition: background 160ms ease; }
-  tbody tr:hover { background: var(--surface-2); }
-  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  td.dim { color: var(--fg-muted); }
-  td.act { text-align: right; }
+  tbody tr { transition: background 150ms var(--ease); }
+  tbody tr:hover { background: var(--panel-2); }
+  td.n { font-variant-numeric: tabular-nums; }
+  td.q { color: var(--ink-3); }
+  td.r { text-align: right; }
 
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 7px;
-    border-radius: 4px;
-    border: 1px solid;
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; font-weight: 500;
+    padding: 2px 7px; border-radius: 2px; border: 1px solid;
   }
-  .tag svg { width: 11px; height: 11px; }
-  .tag.active  { color: var(--sky);    background: var(--sky-dim);    border-color: rgba(56,189,248,.35); }
-  .tag.sending { color: var(--amber);  background: var(--amber-dim);  border-color: rgba(251,191,36,.35); }
-  .tag.failed  { color: var(--red);    background: var(--red-dim);    border-color: rgba(239,68,68,.35); }
-  .tag.above   { color: var(--accent); background: var(--accent-dim); border-color: rgba(34,197,94,.35); }
-  .tag.below   { color: var(--amber);  background: var(--amber-dim);  border-color: rgba(251,191,36,.35); }
+  .chip svg { width: 10px; height: 10px; }
+  .chip.active  { color: var(--patina); background: var(--patina-dim); border-color: rgba(85,184,146,.35); }
+  .chip.sending { color: var(--copper); background: var(--copper-dim); border-color: rgba(230,133,68,.35); }
+  .chip.failed  { color: var(--iron);   background: var(--iron-dim);   border-color: rgba(224,100,83,.35); }
+  .chip.dir     { color: var(--ink-2);  background: transparent;       border-color: var(--rule-2); }
 
-  /* --------------------------------------------------------------- stats */
+  /* --------------------------------------------------------------- gauge */
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); }
-  .stat { background: var(--surface); padding: 12px 14px; }
-  .stat dt { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-muted); margin: 0 0 4px; }
-  .stat dd { margin: 0; font-family: var(--mono); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat dd.zero { color: var(--fg-muted); }
-  .stat dd.hot { color: var(--amber); }
-  .stat dd.bad { color: var(--red); }
+  .gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); }
+  .gauge { background: var(--panel); padding: 11px 13px; }
+  .gauge dt { margin: 0 0 3px; }
+  .gauge dd { margin: 0; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .gauge dd.idle { color: var(--ink-3); }
+  .gauge dd.busy { color: var(--copper); }
+  .gauge dd.bad { color: var(--iron); }
+  .gauge dd.good { color: var(--patina); }
+  .gauge dd.sm { font-size: 12px; font-weight: 500; }
 
-  /* --------------------------------------------------------------- steps */
+  /* ---------------------------------------------------------- test runner */
+
+  .runbar { display: flex; gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+  .runbar button { flex: 1; min-width: 92px; }
+
+  .tally { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--rule); border-bottom: 1px solid var(--rule); }
+  .tally div { background: var(--panel); padding: 8px 10px; }
+  .tally b { display: block; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tally b.good { color: var(--patina); }
+  .tally b.bad { color: var(--iron); }
+
+  .hist { display: flex; gap: 2px; padding: 10px 14px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); }
+  .hist i { width: 9px; height: 14px; border-radius: 1px; flex: none; background: var(--rule-2); }
+  .hist i.p { background: var(--patina); }
+  .hist i.f { background: var(--iron); }
+  .hist i.r { background: var(--brass); animation: pulse 1s var(--ease) infinite; }
+
+  .loopnote {
+    padding: 8px 14px;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--copper);
+    background: var(--copper-dim);
+    border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .loopnote svg { width: 13px; height: 13px; flex: none; }
 
   .steps { list-style: none; margin: 0; padding: 0; }
-  .steps li {
-    display: flex;
-    gap: 11px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-    align-items: flex-start;
-  }
+  .steps li { display: flex; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--rule); align-items: flex-start; }
   .steps li:last-child { border-bottom: none; }
-  .steps .mark {
-    width: 19px; height: 19px;
-    border-radius: 50%;
-    border: 1.5px solid var(--border-strong);
-    display: grid;
-    place-items: center;
-    flex: none;
-    margin-top: 1px;
-    color: var(--fg-muted);
+  .mk {
+    width: 17px; height: 17px; border-radius: 50%;
+    border: 1.5px solid var(--rule-2);
+    display: grid; place-items: center; flex: none; margin-top: 1px;
+    color: var(--ink-3);
   }
-  .steps .mark svg { width: 11px; height: 11px; }
-  .steps li[data-status="running"] .mark { border-color: var(--sky); color: var(--sky); animation: spin 1.1s linear infinite; }
-  .steps li[data-status="pass"] .mark { border-color: var(--accent); background: var(--accent); color: #06240F; }
-  .steps li[data-status="fail"] .mark { border-color: var(--red); background: var(--red); color: #2A0B0B; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .mk svg { width: 10px; height: 10px; }
+  li[data-s="running"] .mk { border-color: var(--brass); color: var(--brass); animation: spin 1.1s linear infinite; }
+  li[data-s="pass"] .mk { border-color: var(--patina); background: var(--patina); color: #0B2019; }
+  li[data-s="fail"] .mk { border-color: var(--iron); background: var(--iron); color: #2A0E0A; }
+  @keyframes spin { to { transform: rotate(360deg) } }
 
-  .steps .txt { flex: 1; min-width: 0; }
-  .steps .label { font-size: 13px; font-weight: 500; }
-  .steps li[data-status="pending"] .label { color: var(--fg-muted); }
-  .steps .detail { font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted); margin-top: 2px; word-break: break-word; white-space: normal; }
-  .steps li[data-status="fail"] .detail { color: var(--red); }
-  .steps .ms { font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted); font-variant-numeric: tabular-nums; flex: none; }
+  .steps .tx { flex: 1; min-width: 0; }
+  .steps .nm { font-size: 12px; }
+  li[data-s="pending"] .nm { color: var(--ink-3); }
+  .steps .dt { font-size: 10.5px; color: var(--ink-3); margin-top: 1px; white-space: normal; word-break: break-word; }
+  li[data-s="fail"] .dt { color: var(--iron); }
+  .steps .ms { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
 
-  .verdict { padding: 11px 16px; font-size: 13px; font-weight: 500; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-  .verdict svg { width: 15px; height: 15px; }
-  .verdict.pass { color: var(--accent); background: var(--accent-dim); }
-  .verdict.fail { color: var(--red); background: var(--red-dim); }
+  .verdict { padding: 10px 14px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; }
+  .verdict svg { width: 14px; height: 14px; }
+  .verdict.pass { color: var(--patina); background: var(--patina-dim); }
+  .verdict.fail { color: var(--iron); background: var(--iron-dim); }
 
   /* --------------------------------------------------------------- inbox */
 
-  .mail { display: flex; gap: 11px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+  .mail { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--rule); align-items: flex-start; }
   .mail:last-child { border-bottom: none; }
-  .mail svg { width: 15px; height: 15px; color: var(--accent); flex: none; margin-top: 2px; }
-  .mail .s { font-size: 13px; font-weight: 500; }
-  .mail .m { font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted); margin-top: 2px; }
+  .mail svg { width: 14px; height: 14px; color: var(--brass); flex: none; margin-top: 2px; }
+  .mail .s { font-size: 12px; }
+  .mail .m { font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
+
+  /* ---------------------------------------------------------- danger zone */
+
+  .danger { border-color: rgba(224, 100, 83, .3); }
+  .danger > .head { background: linear-gradient(rgba(224,100,83,.09), transparent); }
+  .danger > .head svg.ico { color: var(--iron); }
+
+  dialog {
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r);
+    background: var(--panel);
+    color: var(--ink);
+    padding: 0;
+    max-width: 400px;
+    width: calc(100vw - 40px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+  }
+  dialog::backdrop { background: rgba(10, 8, 5, .7); }
+  dialog h3 { margin: 0 0 8px; font-family: var(--sans); font-size: 15px; font-weight: 700; }
+  dialog .pad { padding: 18px; }
+  dialog menu { display: flex; gap: 8px; margin: 16px 0 0; padding: 0; }
+  dialog menu button { flex: 1; }
 
   /* -------------------------------------------------------------- toasts */
 
-  .toasts {
-    position: fixed;
-    right: 20px;
-    bottom: 20px;
-    z-index: 100;
-    display: grid;
-    gap: 9px;
-    max-width: min(380px, calc(100vw - 40px));
-  }
+  .toasts { position: fixed; right: 18px; bottom: 18px; z-index: 100; display: grid; gap: 8px; max-width: min(370px, calc(100vw - 36px)); }
   .toast {
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    border-left: 3px solid var(--fg-muted);
-    border-radius: var(--r-ctl);
-    padding: 11px 14px;
-    font-size: 13px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
-    animation: rise 200ms ease-out;
+    background: var(--panel);
+    border: 1px solid var(--rule-2);
+    border-left: 3px solid var(--ink-3);
+    border-radius: 3px;
+    padding: 10px 13px;
+    font-size: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    animation: rise 200ms var(--ease);
   }
-  .toast.ok { border-left-color: var(--accent); }
-  .toast.err { border-left-color: var(--red); }
-  .toast .t { font-weight: 600; }
-  .toast .b { color: var(--fg-2); margin-top: 2px; font-size: 12.5px; }
-  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .toast.ok { border-left-color: var(--patina); }
+  .toast.err { border-left-color: var(--iron); }
+  .toast b { display: block; }
+  .toast span { color: var(--ink-2); font-size: 11.5px; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 
-  .sr {
-    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-  @media (max-width: 1080px) {
-    main { grid-template-columns: minmax(0, 1fr); }
-  }
+  @media (max-width: 1080px) { main { grid-template-columns: minmax(0, 1fr) } }
   @media (max-width: 640px) {
-    .bar { padding: 10px 16px; gap: 14px; }
-    main { padding: 16px; gap: 16px; }
-    .price-now .v { font-size: 21px; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    /* Touch targets on small screens: 44px minimum. */
-    button, input, select { min-height: 44px; }
-    button.sm { min-height: 44px; }
-    button.icon { min-width: 44px; }
+    .top-in { padding: 10px 14px; gap: 12px }
+    main { padding: 14px; gap: 14px }
+    .readout .v { font-size: 22px }
+    .gauges { grid-template-columns: repeat(2, 1fr) }
+    .tally { grid-template-columns: repeat(2, 1fr) }
+    button, input, select { min-height: 44px }
+    button.sm { min-height: 44px }
+    button.ico-only { min-width: 44px }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
+    *, *::before, *::after { animation: none !important; transition: none !important }
   }
 </style>
 </head>
 <body>
 
-<svg class="sr" aria-hidden="true">
-  <defs>
-    <g id="i-activity"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></g>
-    <g id="i-play"><path d="M6 4l14 8-14 8z"/></g>
-    <g id="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></g>
-    <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
-    <g id="i-trash"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></g>
-    <g id="i-mail"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></g>
-    <g id="i-check"><path d="M20 6 9 17l-5-5"/></g>
-    <g id="i-x"><path d="M18 6 6 18M6 6l12 12"/></g>
-    <g id="i-alert"><path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></g>
-    <g id="i-clock"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></g>
-    <g id="i-layers"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 14 9 5 9-5"/></g>
-    <g id="i-chart"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></g>
-    <g id="i-bell"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></g>
-    <g id="i-beaker"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/><path d="M7 15h10"/></g>
-    <g id="i-dot"><circle cx="12" cy="12" r="4"/></g>
-  </defs>
-</svg>
+<svg class="sr" aria-hidden="true"><defs>
+  <g id="i-mark"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></g>
+  <g id="i-play"><path d="M6 4l14 8-14 8z"/></g>
+  <g id="i-loop"><path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 0 1-4 4H3"/></g>
+  <g id="i-pause"><path d="M9 4v16M15 4v16"/></g>
+  <g id="i-stop"><rect x="5" y="5" width="14" height="14" rx="1"/></g>
+  <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+  <g id="i-trash"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></g>
+  <g id="i-mail"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 7 9 6 9-6"/></g>
+  <g id="i-check"><path d="M20 6 9 17l-5-5"/></g>
+  <g id="i-x"><path d="M18 6 6 18M6 6l12 12"/></g>
+  <g id="i-warn"><path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></g>
+  <g id="i-clock"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></g>
+  <g id="i-stack"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 14 9 5 9-5"/></g>
+  <g id="i-wave"><path d="M2 12h3l3 8 4-16 3 8h7"/></g>
+  <g id="i-bell"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></g>
+  <g id="i-flask"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/><path d="M7 15h10"/></g>
+  <g id="i-dot"><circle cx="12" cy="12" r="4"/></g>
+  <g id="i-up"><path d="M12 19V5M5 12l7-7 7 7"/></g>
+  <g id="i-down"><path d="M12 5v14M19 12l-7 7-7-7"/></g>
+</defs></svg>
 
-<header>
-  <div class="bar">
+<div class="top">
+  <div class="top-in">
     <div class="brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-activity"/></svg>
-      <div>
-        <h1>Alert Engine Console</h1>
-        <span>development only</span>
-      </div>
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mark"/></svg></span>
+      <span>
+        <b>Alert Engine</b>
+        <span class="lbl">development console</span>
+      </span>
     </div>
 
-    <div class="price-now">
-      <span class="v" id="price">&mdash;</span>
+    <div class="readout">
+      <span class="v" id="price">&mdash;&mdash;&mdash;&mdash;</span>
       <span class="u" id="unit"></span>
       <span class="d flat" id="delta"></span>
     </div>
@@ -414,204 +489,210 @@
       <span id="live-text">connecting</span>
     </div>
   </div>
-</header>
+</div>
 
 <main>
   <div class="col">
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-chart"/></svg>
-          Price feed
-        </h2>
-        <span class="spacer"></span>
-        <span class="mono" id="tick-count" style="font-size:11.5px;color:var(--fg-muted)"></span>
-      </header>
-      <div class="body flush">
-        <div class="chart-wrap">
-          <div id="chart-svg"></div>
-          <p class="empty" id="chart-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-clock"/></svg><br>
-            Waiting for the first tick. Start the stack with <span class="mono">make up</span>, or push a price below.
-          </p>
-        </div>
-        <div class="chart-legend" id="chart-legend" hidden>
-          <span><i class="swatch line"></i> observed price</span>
-          <span><i class="swatch target"></i> alert target</span>
-          <span id="chart-range"></span>
-        </div>
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-wave"/></svg>
+        <h2>Price feed</h2>
+        <span class="sp"></span>
+        <span class="meta" id="tickmeta"></span>
+      </div>
+      <div class="scan">
+        <div id="chart-svg"></div>
+        <p class="none" id="chart-none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-clock"/></svg><br>
+          Waiting for the first tick. Start the stack, or push a price below.
+        </p>
+      </div>
+      <div class="legend" id="legend" hidden>
+        <span><i class="sw a"></i> observed price</span>
+        <span><i class="sw b"></i> alert target</span>
+        <span id="hoverval"></span>
       </div>
     </section>
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-bell"/></svg>
-          Alerts
-        </h2>
-        <span class="spacer"></span>
-        <span class="mono" id="alert-count" style="font-size:11.5px;color:var(--fg-muted)"></span>
-      </header>
-      <div class="body flush">
-        <div class="scroll-x">
-          <table>
-            <caption class="sr">Price alerts with their delivery status</caption>
-            <thead>
-              <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Owner</th>
-                <th scope="col">Watching</th>
-                <th scope="col">Target</th>
-                <th scope="col">Status</th>
-                <th scope="col">Triggered</th>
-                <th scope="col">Tries</th>
-                <th scope="col"><span class="sr">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody id="alerts-body"></tbody>
-          </table>
-        </div>
-        <p class="empty" id="alerts-empty">No alerts yet. Create one from the panel on the right.</p>
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-bell"/></svg>
+        <h2>Alerts</h2>
+        <span class="sp"></span>
+        <span class="meta" id="alertmeta"></span>
       </div>
+      <div class="xscroll">
+        <table>
+          <caption class="sr">Price alerts and their delivery status</caption>
+          <thead><tr>
+            <th scope="col">ID</th><th scope="col">Owner</th><th scope="col">Watching</th>
+            <th scope="col">Target</th><th scope="col">Status</th><th scope="col">Triggered</th>
+            <th scope="col">Tries</th><th scope="col"><span class="sr">Actions</span></th>
+          </tr></thead>
+          <tbody id="alerts"></tbody>
+        </table>
+      </div>
+      <p class="none" id="alerts-none">No alerts. Create one from the panel on the right.</p>
     </section>
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mail"/></svg>
-          Delivered mail
-        </h2>
-        <span class="spacer"></span>
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-mail"/></svg>
+        <h2>Delivered mail</h2>
+        <span class="sp"></span>
         <button class="sm" id="clear-inbox" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg>
           Clear
         </button>
-      </header>
-      <div class="body flush">
-        <div id="inbox"></div>
-        <p class="empty" id="inbox-empty">Nothing delivered yet.</p>
       </div>
+      <div id="inbox"></div>
+      <p class="none" id="inbox-none">Nothing delivered yet.</p>
     </section>
 
   </div>
 
   <div class="col">
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-beaker"/></svg>
-          End-to-end test
-        </h2>
-        <span class="spacer"></span>
-        <button class="primary" id="run-test" type="button">
-          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><use href="#i-play"/></svg>
-          Run
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-flask"/></svg>
+        <h2>End-to-end test</h2>
+        <span class="sp"></span>
+        <span class="meta" id="runmeta"></span>
+      </div>
+
+      <div class="runbar">
+        <button class="key" id="btn-once" type="button">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#i-play"/></svg>
+          Run once
         </button>
-      </header>
+        <button id="btn-loop" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-loop"/></svg>
+          <span>Loop</span>
+        </button>
+        <button id="btn-stop" type="button" hidden>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#i-stop"/></svg>
+          Stop
+        </button>
+      </div>
+
+      <div class="loopnote" id="loopnote" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-pause"/></svg>
+        <span id="loopnote-text"></span>
+      </div>
+
+      <div class="tally" id="tally" hidden>
+        <div><span class="lbl">Runs</span><b id="t-runs">0</b></div>
+        <div><span class="lbl">Passed</span><b class="good" id="t-pass">0</b></div>
+        <div><span class="lbl">Failed</span><b class="bad" id="t-fail">0</b></div>
+        <div><span class="lbl">Avg</span><b id="t-avg">&mdash;</b></div>
+      </div>
+
+      <div class="hist" id="hist" hidden></div>
       <div id="verdict"></div>
       <ol class="steps" id="steps"></ol>
-      <div class="body">
-        <p class="hint" style="margin:0">
-          Creates an alert above the current price, walks the feed across it, and waits for the email &mdash; then
-          checks the alert deleted itself and does not fire twice. Needs the watcher and a worker running.
+
+      <div class="pad">
+        <div class="fld">
+          <label class="lbl" for="loop-gap">Gap between looped runs</label>
+          <select id="loop-gap">
+            <option value="0">None</option>
+            <option value="2000" selected>2 seconds</option>
+            <option value="5000">5 seconds</option>
+          </select>
+        </div>
+        <p class="hint">
+          Each run creates an alert, walks the feed across it, waits for the email, then checks the alert deleted
+          itself and did not fire twice. Runs alternate between above and below, so the price oscillates instead of
+          drifting away. Pausing takes effect after the run in progress finishes.
         </p>
       </div>
     </section>
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-layers"/></svg>
-          Pipeline
-        </h2>
-      </header>
-      <dl class="stats">
-        <div class="stat"><dt>Above</dt><dd id="s-above">0</dd></div>
-        <div class="stat"><dt>Below</dt><dd id="s-below">0</dd></div>
-        <div class="stat"><dt>In flight</dt><dd id="s-inflight">0</dd></div>
-        <div class="stat"><dt>Queued</dt><dd id="s-queued">0</dd></div>
-        <div class="stat"><dt>Failed jobs</dt><dd id="s-failed">0</dd></div>
-        <div class="stat"><dt>Index</dt><dd id="s-ready" style="font-size:13px">&mdash;</dd></div>
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-stack"/></svg>
+        <h2>Pipeline</h2>
+      </div>
+      <dl class="gauges">
+        <div class="gauge"><dt class="lbl">Above</dt><dd id="g-above">0</dd></div>
+        <div class="gauge"><dt class="lbl">Below</dt><dd id="g-below">0</dd></div>
+        <div class="gauge"><dt class="lbl">In flight</dt><dd id="g-inflight">0</dd></div>
+        <div class="gauge"><dt class="lbl">Queued</dt><dd id="g-queued">0</dd></div>
+        <div class="gauge"><dt class="lbl">Failed jobs</dt><dd id="g-failed">0</dd></div>
+        <div class="gauge"><dt class="lbl">Index</dt><dd class="sm" id="g-ready">&mdash;</dd></div>
       </dl>
     </section>
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-activity"/></svg>
-          Push prices
-        </h2>
-      </header>
-      <div class="body">
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-wave"/></svg>
+        <h2>Feed control</h2>
+      </div>
+      <div class="pad">
         <form id="push-form">
-          <div class="field">
-            <label for="push-input">Next prices the feed will serve</label>
-            <div class="row">
-              <div class="field"><input id="push-input" name="prices" inputmode="decimal" placeholder="2690 2701.25" autocomplete="off"></div>
-              <button class="primary" type="submit">Push</button>
+          <div class="fld">
+            <label class="lbl" for="push-input">Next prices to serve</label>
+            <div class="inline">
+              <div class="fld"><input id="push-input" inputmode="decimal" placeholder="2690 2701.25" autocomplete="off"></div>
+              <button class="key" type="submit">Push</button>
             </div>
-            <p class="hint">Space-separated. Each value is served on one tick, in order, then the walk resumes from the last one.</p>
+            <p class="hint">Space separated, one per tick, in order. The walk then resumes from the last value.</p>
           </div>
         </form>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
-
-        <div class="split">
-          <div class="field">
-            <label for="auto-interval">Auto push every</label>
-            <select id="auto-interval">
+        <div class="two" style="margin-top:14px">
+          <div class="fld">
+            <label class="lbl" for="auto-int">Auto every</label>
+            <select id="auto-int">
               <option value="1000">1 second</option>
               <option value="2000" selected>2 seconds</option>
               <option value="5000">5 seconds</option>
             </select>
           </div>
-          <div class="field">
-            <label for="auto-drift">Drift</label>
+          <div class="fld">
+            <label class="lbl" for="auto-drift">Drift</label>
             <select id="auto-drift">
               <option value="up">Upward</option>
-              <option value="random" selected>Random walk</option>
+              <option value="random" selected>Random</option>
               <option value="down">Downward</option>
             </select>
           </div>
         </div>
-        <div class="field">
-          <button id="auto-toggle" type="button" style="width:100%" aria-pressed="false">
-            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><use href="#i-play"/></svg>
+        <div class="fld">
+          <button class="wide" id="auto-toggle" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#i-play"/></svg>
             <span>Start auto push</span>
           </button>
-          <p class="hint">Moves the price by up to 4.00 a step, so alerts trigger on their own.</p>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <header>
-        <h2>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg>
-          New alert
-        </h2>
-      </header>
-      <div class="body">
+    <section class="panel">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg>
+        <h2>New alert</h2>
+      </div>
+      <div class="pad">
         <form id="alert-form">
-          <div class="split">
-            <div class="field">
-              <label for="alert-target">Target price</label>
-              <input id="alert-target" name="target_price" inputmode="decimal" placeholder="2750.00" autocomplete="off" required>
+          <div class="two">
+            <div class="fld">
+              <label class="lbl" for="a-target">Target</label>
+              <input id="a-target" inputmode="decimal" placeholder="2750.00" autocomplete="off" required>
             </div>
-            <div class="field">
-              <label for="alert-direction">Direction</label>
-              <select id="alert-direction" name="direction">
-                <option value="">Infer from price</option>
+            <div class="fld">
+              <label class="lbl" for="a-dir">Direction</label>
+              <select id="a-dir">
+                <option value="">Infer</option>
                 <option value="above">Above</option>
                 <option value="below">Below</option>
               </select>
             </div>
           </div>
-          <div class="field">
-            <button class="primary" type="submit" style="width:100%">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg>
+          <div class="fld">
+            <button class="key wide" type="submit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-plus"/></svg>
               Create alert
             </button>
             <p class="hint">Created as the demo account. A target equal to the current price is refused as ambiguous.</p>
@@ -620,8 +701,39 @@
       </div>
     </section>
 
+    <section class="panel danger">
+      <div class="head">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-warn"/></svg>
+        <h2>Reset</h2>
+      </div>
+      <div class="pad">
+        <button class="risky wide" id="btn-reset" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-trash"/></svg>
+          Reset all data
+        </button>
+        <p class="hint">
+          Deletes every alert, empties the queue, the failed jobs, the index and the inbox, and drops any scripted
+          prices. The live market price is left alone.
+        </p>
+      </div>
+    </section>
+
   </div>
 </main>
+
+<dialog id="confirm">
+  <div class="pad">
+    <h3>Reset all data?</h3>
+    <p class="hint" style="margin:0">
+      This deletes every alert, clears the queue and failed jobs, empties the index and the Mailpit inbox, and drops
+      queued scripted prices. It cannot be undone. The live price keeps ticking.
+    </p>
+    <menu>
+      <button id="confirm-no" type="button">Cancel</button>
+      <button class="risky-solid" id="confirm-yes" type="button">Reset everything</button>
+    </menu>
+  </div>
+</dialog>
 
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
@@ -634,494 +746,456 @@
   var POLL = Math.max(500, cfg.pollIntervalMs || 1000);
   var BASE = cfg.base || '/dev/';
 
-  var $ = function (id) { return document.getElementById(id); };
-  var history = [];          // { price: Number, at: String }
-  var lastReceivedAt = null;
-  var lastTickSeen = 0;
-  var ticks = 0;
-  var latest = null;         // last state payload
-  var polling = false;
-  var autoTimer = null;
-  var testRunning = false;
+  var W = 720, H = 190, PL = 56, PR = 16, PT = 12, PB = 20;
 
-  // ------------------------------------------------------------- helpers
+  var $ = function (id) { return document.getElementById(id); };
+  var series = [];
+  var lastAt = null, lastTick = 0, ticks = 0;
+  var latest = null, polling = false, hoverIx = null;
+  var autoTimer = null;
+
+  var run = { mode: 'idle', paused: false, stop: false, busy: false, n: 0, pass: 0, fail: 0, ms: [], hist: [] };
 
   function fmt(n, dp) {
-    return Number(n).toLocaleString('en-US', {
-      minimumFractionDigits: dp === undefined ? 2 : dp,
-      maximumFractionDigits: dp === undefined ? 2 : dp
-    });
+    return Number(n).toLocaleString('en-US', { minimumFractionDigits: dp === undefined ? 2 : dp, maximumFractionDigits: dp === undefined ? 2 : dp });
+  }
+  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function ico(id, filled) {
+    return '<svg viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="' + (filled ? 'none' : 'currentColor') +
+      '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#' + id + '"/></svg>';
   }
 
   function toast(kind, title, body) {
     var el = document.createElement('div');
     el.className = 'toast ' + kind;
-    var t = document.createElement('div');
-    t.className = 't';
-    t.textContent = title;
-    el.appendChild(t);
-    if (body) {
-      var b = document.createElement('div');
-      b.className = 'b';
-      b.textContent = body;
-      el.appendChild(b);
-    }
+    el.innerHTML = '<b>' + esc(title) + '</b>' + (body ? '<span>' + esc(body) + '</span>' : '');
     $('toasts').appendChild(el);
     setTimeout(function () { el.remove(); }, 4500);
   }
 
-  function api(method, url, body) {
-    var opts = {
-      method: method,
-      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' }
-    };
-    if (body !== undefined) {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
-    }
-    return fetch(url, opts).then(function (res) {
+  function api(method, path, body) {
+    var o = { method: method, headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' } };
+    if (body !== undefined) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body); }
+    return fetch(BASE + path, o).then(function (res) {
       if (res.status === 204) return null;
       return res.json().catch(function () { return null; }).then(function (data) {
         if (!res.ok) {
           var msg = (data && data.message) || ('Request failed with status ' + res.status);
-          if (data && data.errors) {
-            msg = Object.keys(data.errors).map(function (k) { return data.errors[k][0]; }).join(' ');
-          }
-          var err = new Error(msg);
-          err.status = res.status;
-          throw err;
+          if (data && data.errors) msg = Object.keys(data.errors).map(function (k) { return data.errors[k][0]; }).join(' ');
+          throw new Error(msg);
         }
         return data;
       });
     });
   }
 
-  function icon(id, filled) {
-    return '<svg viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') +
-      '" stroke="' + (filled ? 'none' : 'currentColor') +
-      '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#' + id + '"/></svg>';
-  }
-
-  // -------------------------------------------------------------- render
-
-  function renderHeader(state) {
-    var p = state.price;
-    if (!p.available) {
-      $('live-dot').className = 'dot down';
-      $('live-text').textContent = 'index unreachable';
-      return;
-    }
+  function renderTop(s) {
+    var p = s.price;
     $('unit').textContent = p.unit;
-
-    if (p.price === null) {
-      $('price').textContent = '—';
-      $('live-dot').className = 'dot warn';
-      $('live-text').textContent = 'no price yet';
-      return;
-    }
+    if (!p.available) { $('live-dot').className = 'dot down'; $('live-text').textContent = 'index unreachable'; return; }
+    if (p.price === null) { $('price').textContent = '————'; $('live-dot').className = 'dot warn'; $('live-text').textContent = 'no price yet'; return; }
 
     $('price').textContent = fmt(p.price);
-
-    if (p.received_at !== lastReceivedAt) {
-      lastReceivedAt = p.received_at;
-      lastTickSeen = Date.now();
-      ticks++;
-      history.push({ price: Number(p.price), at: p.received_at });
-      if (history.length > 120) history.shift();
+    if (p.received_at !== lastAt) {
+      lastAt = p.received_at; lastTick = Date.now(); ticks++;
+      series.push({ v: Number(p.price), at: p.received_at });
+      if (series.length > 120) series.shift();
     }
-
-    var prev = history.length > 1 ? history[history.length - 2].price : null;
+    var prev = series.length > 1 ? series[series.length - 2].v : null;
     var d = $('delta');
-    if (prev === null) {
-      d.textContent = '';
-    } else {
+    if (prev === null) { d.textContent = ''; }
+    else {
       var diff = Number(p.price) - prev;
       d.className = 'd ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat');
       d.textContent = (diff > 0 ? '+' : '') + fmt(diff);
     }
-
-    var quiet = Date.now() - lastTickSeen;
-    if (quiet < POLL * 3) {
-      $('live-dot').className = 'dot live';
-      $('live-text').textContent = 'live';
-    } else {
-      $('live-dot').className = 'dot warn';
-      $('live-text').textContent = 'no tick for ' + Math.round(quiet / 1000) + 's';
-    }
-    $('tick-count').textContent = ticks + ' ticks';
+    var quiet = Date.now() - lastTick;
+    if (quiet < POLL * 3) { $('live-dot').className = 'dot live'; $('live-text').textContent = 'live'; }
+    else { $('live-dot').className = 'dot warn'; $('live-text').textContent = 'no tick for ' + Math.round(quiet / 1000) + 's'; }
+    $('tickmeta').textContent = ticks + ' ticks';
   }
 
-  function renderChart(state) {
-    if (history.length < 2) return;
+  function renderChart(s) {
+    if (!s || series.length < 2) return;
+    $('chart-none').hidden = true;
+    $('legend').hidden = false;
 
-    $('chart-empty').hidden = true;
-    $('chart-legend').hidden = false;
+    var targets = (s.alerts || []).filter(function (a) { return a.status === 'active'; })
+      .map(function (a) { return { v: Number(a.target_price), d: a.direction }; }).slice(0, 8);
 
-    var W = 720, H = 190, PL = 54, PR = 14, PT = 12, PB = 20;
-    var targets = (state.alerts || [])
-      .filter(function (a) { return a.status === 'active'; })
-      .map(function (a) { return { v: Number(a.target_price), dir: a.direction }; })
-      .slice(0, 8);
-
-    var values = history.map(function (h) { return h.price; });
-    var lo = Math.min.apply(null, values);
-    var hi = Math.max.apply(null, values);
+    var vals = series.map(function (p) { return p.v; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
     targets.forEach(function (t) { lo = Math.min(lo, t.v); hi = Math.max(hi, t.v); });
+    var pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
 
-    var pad = (hi - lo) * 0.12 || 1;
-    lo -= pad; hi += pad;
+    var X = function (i) { return PL + (i / (series.length - 1)) * (W - PL - PR); };
+    var Y = function (v) { return PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB); };
+    var pts = series.map(function (p, i) { return X(i) + ',' + Y(p.v); });
 
-    var x = function (i) { return PL + (i / (history.length - 1)) * (W - PL - PR); };
-    var y = function (v) { return PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB); };
-
-    var pts = history.map(function (h, i) { return x(i) + ',' + y(h.price); }).join(' ');
-    var area = 'M' + x(0) + ',' + (H - PB) + ' L' + pts.split(' ').join(' L') + ' L' + x(history.length - 1) + ',' + (H - PB) + ' Z';
-
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Observed gold price over the last ' +
-      history.length + ' ticks, currently ' + fmt(values[values.length - 1]) + '">';
+    var g = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Observed price over the last ' +
+      series.length + ' ticks, currently ' + fmt(vals[vals.length - 1]) + '">';
 
     [0, 0.5, 1].forEach(function (f) {
       var v = lo + (hi - lo) * f;
-      svg += '<line x1="' + PL + '" y1="' + y(v) + '" x2="' + (W - PR) + '" y2="' + y(v) +
-        '" stroke="#334155" stroke-width="1"/>';
-      svg += '<text x="' + (PL - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end" fill="#94A3B8" ' +
-        'font-family="IBM Plex Mono, monospace" font-size="10">' + fmt(v) + '</text>';
+      g += '<line x1="' + PL + '" y1="' + Y(v) + '" x2="' + (W - PR) + '" y2="' + Y(v) + '" stroke="#33291C"/>';
+      g += '<text x="' + (PL - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" fill="#91816A" font-family="IBM Plex Mono, monospace" font-size="10">' + fmt(v) + '</text>';
     });
 
     targets.forEach(function (t) {
       if (t.v < lo || t.v > hi) return;
-      svg += '<line x1="' + PL + '" y1="' + y(t.v) + '" x2="' + (W - PR) + '" y2="' + y(t.v) +
-        '" stroke="#38BDF8" stroke-width="1.4" stroke-dasharray="5 4" opacity=".85"/>';
-      svg += '<text x="' + (W - PR) + '" y="' + (y(t.v) - 5) + '" text-anchor="end" fill="#38BDF8" ' +
-        'font-family="IBM Plex Mono, monospace" font-size="10">' + t.dir + ' ' + fmt(t.v) + '</text>';
+      g += '<line x1="' + PL + '" y1="' + Y(t.v) + '" x2="' + (W - PR) + '" y2="' + Y(t.v) + '" stroke="#55B892" stroke-width="1.3" stroke-dasharray="5 4" opacity=".9"/>';
+      g += '<text x="' + (W - PR) + '" y="' + (Y(t.v) - 5) + '" text-anchor="end" fill="#55B892" font-family="IBM Plex Mono, monospace" font-size="10">' + t.d + ' ' + fmt(t.v) + '</text>';
     });
 
-    svg += '<path d="' + area + '" fill="#22C55E" opacity=".10"/>';
-    svg += '<polyline points="' + pts + '" fill="none" stroke="#22C55E" stroke-width="2" ' +
-      'stroke-linejoin="round" stroke-linecap="round"/>';
-    svg += '<circle cx="' + x(history.length - 1) + '" cy="' + y(values[values.length - 1]) +
-      '" r="3.5" fill="#22C55E" stroke="#0F172A" stroke-width="2"/>';
-    svg += '</svg>';
+    g += '<path d="M' + X(0) + ',' + (H - PB) + ' L' + pts.join(' L') + ' L' + X(series.length - 1) + ',' + (H - PB) + ' Z" fill="#E0A93B" opacity=".08"/>';
+    g += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#E0A93B" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>';
+    g += '<circle cx="' + X(series.length - 1) + '" cy="' + Y(vals[vals.length - 1]) + '" r="3.2" fill="#E0A93B" stroke="#14110C" stroke-width="2"/>';
 
-    $('chart-svg').innerHTML = svg;
-    $('chart-range').textContent = history.length + ' ticks shown';
+    if (hoverIx !== null && series[hoverIx]) {
+      g += '<line x1="' + X(hoverIx) + '" y1="' + PT + '" x2="' + X(hoverIx) + '" y2="' + (H - PB) + '" stroke="#C4B49A" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>';
+      g += '<circle cx="' + X(hoverIx) + '" cy="' + Y(series[hoverIx].v) + '" r="3" fill="#F3CE7E"/>';
+    }
+    g += '</svg>';
+
+    $('chart-svg').innerHTML = g;
+    $('hoverval').textContent = hoverIx !== null && series[hoverIx]
+      ? 'at cursor: ' + fmt(series[hoverIx].v)
+      : series.length + ' ticks shown';
   }
 
-  function renderAlerts(state) {
-    var rows = state.alerts || [];
-    $('alert-count').textContent = rows.length ? rows.length + ' shown' : '';
-    $('alerts-empty').hidden = rows.length > 0;
-
-    $('alerts-body').innerHTML = rows.map(function (a) {
-      var trig = a.triggered_price ? fmt(a.triggered_price) : '—';
-      var owner = a.owner ? a.owner.split('@')[0] : '—';
-      var statusIcon = a.status === 'failed' ? 'i-alert' : a.status === 'sending' ? 'i-clock' : 'i-dot';
+  function renderAlerts(s) {
+    var rows = s.alerts || [];
+    $('alertmeta').textContent = rows.length ? rows.length + ' shown' : '';
+    $('alerts-none').hidden = rows.length > 0;
+    $('alerts').innerHTML = rows.map(function (a) {
+      var st = a.status === 'failed' ? 'i-warn' : a.status === 'sending' ? 'i-clock' : 'i-dot';
       return '<tr>' +
-        '<td class="n dim">' + a.id + '</td>' +
-        '<td class="dim">' + owner + '</td>' +
-        '<td><span class="tag ' + a.direction + '">' + a.direction + '</span></td>' +
+        '<td class="n q">' + a.id + '</td>' +
+        '<td class="q">' + esc((a.owner || '').split('@')[0]) + '</td>' +
+        '<td><span class="chip dir">' + ico(a.direction === 'above' ? 'i-up' : 'i-down') + a.direction + '</span></td>' +
         '<td class="n">' + fmt(a.target_price) + '</td>' +
-        '<td><span class="tag ' + a.status + '">' + icon(statusIcon, a.status === 'active') + a.status + '</span></td>' +
-        '<td class="n dim">' + trig + '</td>' +
-        '<td class="n dim">' + a.attempts + '</td>' +
-        '<td class="act"><button class="sm danger icon" data-cancel="' + a.id +
-          '" type="button" aria-label="Cancel alert ' + a.id + '">' + icon('i-trash') + '</button></td>' +
+        '<td><span class="chip ' + a.status + '">' + ico(st, a.status === 'active') + a.status + '</span></td>' +
+        '<td class="n q">' + (a.triggered_price ? fmt(a.triggered_price) : '—') + '</td>' +
+        '<td class="n q">' + a.attempts + '</td>' +
+        '<td class="r"><button class="sm risky ico-only" data-cancel="' + a.id + '" type="button" aria-label="Cancel alert ' + a.id + '">' + ico('i-trash') + '</button></td>' +
         '</tr>';
     }).join('');
   }
 
-  function renderStats(state) {
-    var i = state.index, q = state.queue;
-    $('s-above').textContent = i.above;
-    $('s-below').textContent = i.below;
-    $('s-inflight').textContent = i.inflight;
-    $('s-queued').textContent = q.pending;
-    $('s-failed').textContent = q.failed;
-
-    $('s-inflight').className = i.inflight > 0 ? 'hot' : 'zero';
-    $('s-queued').className = q.pending > 0 ? 'hot' : 'zero';
-    $('s-failed').className = q.failed > 0 ? 'bad' : 'zero';
-    $('s-above').className = i.above > 0 ? '' : 'zero';
-    $('s-below').className = i.below > 0 ? '' : 'zero';
-
-    var ready = $('s-ready');
-    if (!i.available) { ready.textContent = 'unreachable'; ready.className = 'bad'; }
-    else if (i.ready) { ready.textContent = 'ready'; ready.className = ''; }
-    else { ready.textContent = 'not built'; ready.className = 'hot'; }
+  function renderGauges(s) {
+    var i = s.index, q = s.queue;
+    $('g-above').textContent = i.above; $('g-above').className = i.above ? '' : 'idle';
+    $('g-below').textContent = i.below; $('g-below').className = i.below ? '' : 'idle';
+    $('g-inflight').textContent = i.inflight; $('g-inflight').className = i.inflight ? 'busy' : 'idle';
+    $('g-queued').textContent = q.pending; $('g-queued').className = q.pending ? 'busy' : 'idle';
+    $('g-failed').textContent = q.failed; $('g-failed').className = q.failed ? 'bad' : 'idle';
+    var r = $('g-ready');
+    if (!i.available) { r.textContent = 'unreachable'; r.className = 'sm bad'; }
+    else if (i.ready) { r.textContent = 'ready'; r.className = 'sm good'; }
+    else { r.textContent = 'not built'; r.className = 'sm busy'; }
   }
 
-  function renderInbox(state) {
-    var box = state.inbox;
+  function renderInbox(s) {
+    var box = s.inbox;
     if (!box.available) {
       $('inbox').innerHTML = '';
-      $('inbox-empty').hidden = false;
-      $('inbox-empty').textContent = 'Mailpit is not reachable. With the Compose stack it runs at localhost:8025.';
+      $('inbox-none').hidden = false;
+      $('inbox-none').textContent = 'Mailpit is not reachable. In the Compose stack it runs at localhost:8025.';
       return;
     }
-    var msgs = box.messages || [];
-    $('inbox-empty').hidden = msgs.length > 0;
-    $('inbox-empty').textContent = 'Nothing delivered yet.';
-    $('inbox').innerHTML = msgs.map(function (m) {
-      var when = m.at ? new Date(m.at).toLocaleTimeString() : '';
-      return '<div class="mail">' + icon('i-mail') +
-        '<div><div class="s">' + escapeHtml(m.subject) + '</div>' +
-        '<div class="m">' + escapeHtml(m.to) + ' · ' + when + '</div></div></div>';
+    var m = box.messages || [];
+    $('inbox-none').hidden = m.length > 0;
+    $('inbox-none').textContent = 'Nothing delivered yet.';
+    $('inbox').innerHTML = m.map(function (x) {
+      return '<div class="mail">' + ico('i-mail') + '<div><div class="s">' + esc(x.subject) + '</div>' +
+        '<div class="m">' + esc(x.to) + ' · ' + (x.at ? new Date(x.at).toLocaleTimeString() : '') + '</div></div></div>';
     }).join('');
   }
-
-  function escapeHtml(s) {
-    var d = document.createElement('div');
-    d.textContent = s == null ? '' : String(s);
-    return d.innerHTML;
-  }
-
-  // ---------------------------------------------------------------- poll
 
   function poll() {
     if (polling || document.hidden) return Promise.resolve(latest);
     polling = true;
-    return api('GET', BASE + 'state').then(function (state) {
-      latest = state;
-      renderHeader(state);
-      renderChart(state);
-      renderAlerts(state);
-      renderStats(state);
-      renderInbox(state);
-      return state;
+    return api('GET', 'state').then(function (s) {
+      latest = s; renderTop(s); renderChart(s); renderAlerts(s); renderGauges(s); renderInbox(s);
+      return s;
     }).catch(function (e) {
       $('live-dot').className = 'dot down';
       $('live-text').textContent = 'console offline';
-      if (window.console && console.error) console.error('console poll failed', e);
+      if (window.console) console.error('poll failed', e);
       return null;
     }).finally(function () { polling = false; });
   }
 
-  // ------------------------------------------------------------- actions
-
-  function pushPrices(values) {
-    return api('POST', BASE + 'prices', { prices: values });
-  }
-
-  function currentPrice() {
-    return latest && latest.price && latest.price.price !== null ? Number(latest.price.price) : null;
-  }
+  function push(v) { return api('POST', 'prices', { prices: v }); }
+  function price() { return latest && latest.price && latest.price.price !== null ? Number(latest.price.price) : null; }
 
   $('push-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var raw = $('push-input').value.trim();
     if (!raw) { toast('err', 'Nothing to push', 'Enter one or more prices, separated by spaces.'); return; }
-    var values = raw.split(/[\s,]+/).filter(Boolean);
-    var btn = e.target.querySelector('button');
-    btn.disabled = true;
-    pushPrices(values).then(function (r) {
-      toast('ok', 'Queued ' + r.pushed.length + ' price(s)', r.pushed.join(' → '));
+    var b = e.target.querySelector('button'); b.disabled = true;
+    push(raw.split(/[\s,]+/).filter(Boolean)).then(function (r) {
+      toast('ok', 'Queued ' + r.pushed.length + ' price(s)', r.pushed.join(' -> '));
       $('push-input').value = '';
-    }).catch(function (err) {
-      toast('err', 'Could not push', err.message);
-    }).finally(function () { btn.disabled = false; });
+    }).catch(function (err) { toast('err', 'Could not push', err.message); })
+      .finally(function () { b.disabled = false; });
   });
 
   $('alert-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    var target = $('alert-target').value.trim();
-    var dir = $('alert-direction').value;
-    var btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    api('POST', BASE + 'alerts', { target_price: target, direction: dir || null }).then(function (r) {
-      toast('ok', 'Alert #' + r.alert.id + ' created', 'Watching ' + r.alert.direction + ' ' + fmt(r.alert.target_price));
-      $('alert-target').value = '';
-      poll();
-    }).catch(function (err) {
-      toast('err', 'Could not create the alert', err.message);
-    }).finally(function () { btn.disabled = false; });
+    var b = e.target.querySelector('button[type="submit"]'); b.disabled = true;
+    api('POST', 'alerts', { target_price: $('a-target').value.trim(), direction: $('a-dir').value || null })
+      .then(function (r) {
+        toast('ok', 'Alert #' + r.alert.id + ' created', 'Watching ' + r.alert.direction + ' ' + fmt(r.alert.target_price));
+        $('a-target').value = ''; poll();
+      })
+      .catch(function (err) { toast('err', 'Could not create the alert', err.message); })
+      .finally(function () { b.disabled = false; });
   });
 
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-cancel]');
-    if (!btn) return;
-    var id = btn.getAttribute('data-cancel');
-    btn.disabled = true;
-    api('DELETE', BASE + 'alerts/' + id).then(function () {
-      toast('ok', 'Alert #' + id + ' cancelled');
-      poll();
-    }).catch(function (err) {
-      toast('err', 'Could not cancel alert #' + id, err.message);
-      btn.disabled = false;
-    });
+    var b = e.target.closest('[data-cancel]');
+    if (!b) return;
+    var id = b.getAttribute('data-cancel');
+    b.disabled = true;
+    api('DELETE', 'alerts/' + id)
+      .then(function () { toast('ok', 'Alert #' + id + ' cancelled'); poll(); })
+      .catch(function (err) { toast('err', 'Could not cancel alert #' + id, err.message); b.disabled = false; });
   });
 
   $('clear-inbox').addEventListener('click', function () {
-    var btn = $('clear-inbox');
-    btn.disabled = true;
-    api('POST', BASE + 'inbox/clear').then(function (r) {
-      if (r.cleared) toast('ok', 'Inbox cleared');
-      else toast('err', 'Could not clear the inbox', 'Mailpit did not respond.');
+    var b = $('clear-inbox'); b.disabled = true;
+    api('POST', 'inbox/clear').then(function (r) {
+      toast(r.cleared ? 'ok' : 'err', r.cleared ? 'Inbox cleared' : 'Could not clear the inbox');
       poll();
-    }).finally(function () { btn.disabled = false; });
+    }).finally(function () { b.disabled = false; });
   });
 
-  // ----------------------------------------------------------- auto push
-
-  function autoStep() {
-    var base = currentPrice();
-    if (base === null) return;
-    var drift = $('auto-drift').value;
-    var step = Math.random() * 4;
-    var move = drift === 'up' ? step : drift === 'down' ? -step : (Math.random() - 0.5) * 2 * step;
-    pushPrices([Math.max(1, base + move).toFixed(2)]).catch(function () {});
-  }
+  $('chart-svg').addEventListener('mousemove', function (e) {
+    if (series.length < 2) return;
+    var r = e.currentTarget.getBoundingClientRect();
+    var vx = ((e.clientX - r.left) / r.width) * W;
+    var i = Math.round(((vx - PL) / (W - PL - PR)) * (series.length - 1));
+    hoverIx = Math.max(0, Math.min(series.length - 1, i));
+    renderChart(latest);
+  });
+  $('chart-svg').addEventListener('mouseleave', function () { hoverIx = null; renderChart(latest); });
 
   $('auto-toggle').addEventListener('click', function () {
-    var btn = $('auto-toggle');
-    var label = btn.querySelector('span');
-    var svg = btn.querySelector('use');
+    var b = $('auto-toggle'), t = b.querySelector('span'), u = b.querySelector('use');
     if (autoTimer) {
-      clearInterval(autoTimer);
-      autoTimer = null;
-      btn.classList.remove('on');
-      btn.setAttribute('aria-pressed', 'false');
-      label.textContent = 'Start auto push';
-      svg.setAttribute('href', '#i-play');
+      clearInterval(autoTimer); autoTimer = null;
+      b.classList.remove('on'); b.setAttribute('aria-pressed', 'false');
+      t.textContent = 'Start auto push'; u.setAttribute('href', '#i-play');
     } else {
-      autoTimer = setInterval(autoStep, Number($('auto-interval').value));
-      autoStep();
-      btn.classList.add('on');
-      btn.setAttribute('aria-pressed', 'true');
-      label.textContent = 'Stop auto push';
-      svg.setAttribute('href', '#i-stop');
+      var stepFn = function () {
+        var base = price(); if (base === null) return;
+        var drift = $('auto-drift').value, step = Math.random() * 4;
+        var move = drift === 'up' ? step : drift === 'down' ? -step : (Math.random() - 0.5) * 2 * step;
+        push([Math.max(1, base + move).toFixed(2)]).catch(function () {});
+      };
+      autoTimer = setInterval(stepFn, Number($('auto-int').value));
+      stepFn();
+      b.classList.add('on'); b.setAttribute('aria-pressed', 'true');
+      t.textContent = 'Stop auto push'; u.setAttribute('href', '#i-stop');
     }
   });
 
-  // ------------------------------------------------------------ e2e test
-
   var STEPS = [
-    ['snapshot', 'Read the current price'],
-    ['create',   'Create an alert above it'],
-    ['push',     'Walk the feed across the target'],
-    ['deliver',  'Wait for the email'],
-    ['deleted',  'Check the alert deleted itself'],
-    ['once',     'Confirm it does not fire twice']
+    ['snap', 'Read the current price'],
+    ['make', 'Create an alert'],
+    ['walk', 'Walk the feed across the target'],
+    ['mail', 'Wait for the email'],
+    ['gone', 'Check the alert deleted itself'],
+    ['once', 'Confirm it does not fire twice']
   ];
 
   function resetSteps() {
     $('verdict').innerHTML = '';
     $('steps').innerHTML = STEPS.map(function (s) {
-      return '<li data-status="pending" data-step="' + s[0] + '">' +
-        '<span class="mark">' + icon('i-dot', true) + '</span>' +
-        '<span class="txt"><span class="label">' + s[1] + '</span>' +
-        '<span class="detail"></span></span><span class="ms"></span></li>';
+      return '<li data-s="pending" data-k="' + s[0] + '"><span class="mk">' + ico('i-dot', true) + '</span>' +
+        '<span class="tx"><span class="nm">' + s[1] + '</span><span class="dt"></span></span><span class="ms"></span></li>';
     }).join('');
   }
 
-  function step(name, status, detail, ms) {
-    var li = $('steps').querySelector('[data-step="' + name + '"]');
+  function mark(k, s, detail, ms) {
+    var li = $('steps').querySelector('[data-k="' + k + '"]');
     if (!li) return;
-    li.dataset.status = status;
-    li.querySelector('.mark').innerHTML =
-      status === 'pass' ? icon('i-check') :
-      status === 'fail' ? icon('i-x') :
-      status === 'running' ? icon('i-clock') : icon('i-dot', true);
-    if (detail !== undefined) li.querySelector('.detail').textContent = detail;
+    li.dataset.s = s;
+    li.querySelector('.mk').innerHTML = s === 'pass' ? ico('i-check') : s === 'fail' ? ico('i-x') : s === 'running' ? ico('i-clock') : ico('i-dot', true);
+    if (detail !== undefined) li.querySelector('.dt').textContent = detail;
     if (ms !== undefined) li.querySelector('.ms').textContent = ms + ' ms';
   }
 
   function verdict(ok, text) {
     $('verdict').className = 'verdict ' + (ok ? 'pass' : 'fail');
-    $('verdict').innerHTML = icon(ok ? 'i-check' : 'i-alert') + '<span>' + text + '</span>';
+    $('verdict').innerHTML = ico(ok ? 'i-check' : 'i-warn') + '<span>' + esc(text) + '</span>';
   }
 
-  function waitFor(check, timeoutMs, label) {
-    var started = Date.now();
+  function waitFor(check, timeout, message) {
+    var t0 = Date.now();
     return new Promise(function (resolve, reject) {
-      (function attempt() {
-        poll().then(function (state) {
-          if (state && check(state)) return resolve(Date.now() - started);
-          if (Date.now() - started > timeoutMs) return reject(new Error(label));
-          setTimeout(attempt, 400);
+      (function again() {
+        poll().then(function (s) {
+          if (s && check(s)) return resolve(Date.now() - t0);
+          if (Date.now() - t0 > timeout) return reject(new Error(message));
+          setTimeout(again, 400);
         });
       })();
     });
   }
 
-  $('run-test').addEventListener('click', function () {
-    if (testRunning) return;
-    testRunning = true;
-    var btn = $('run-test');
-    btn.disabled = true;
+  function renderRunUi() {
+    $('tally').hidden = run.n === 0;
+    $('hist').hidden = run.hist.length === 0;
+    $('t-runs').textContent = run.n;
+    $('t-pass').textContent = run.pass;
+    $('t-fail').textContent = run.fail;
+    $('t-avg').textContent = run.ms.length
+      ? fmt(run.ms.reduce(function (a, b) { return a + b; }, 0) / run.ms.length, 0) + ' ms' : '—';
+    $('runmeta').textContent = run.mode === 'loop' ? (run.paused ? 'loop paused' : 'looping') : (run.busy ? 'running' : '');
+    $('hist').innerHTML = run.hist.slice(-40).map(function (h) {
+      return '<i class="' + (h.state === 'pass' ? 'p' : h.state === 'fail' ? 'f' : 'r') + '" title="Run ' + h.n +
+        (h.state === 'running' ? ' · in progress' : ' · ' + h.state + (h.ms ? ' · ' + h.ms + ' ms' : '')) + '"></i>';
+    }).join('');
+
+    var loop = $('btn-loop'), span = loop.querySelector('span'), use = loop.querySelector('use');
+    $('btn-once').disabled = run.busy || run.mode === 'loop';
+    $('btn-stop').hidden = run.mode !== 'loop';
+    loop.setAttribute('aria-pressed', run.mode === 'loop' ? 'true' : 'false');
+    loop.classList.toggle('on', run.mode === 'loop' && !run.paused);
+    loop.classList.toggle('warnish', run.paused);
+    if (run.mode !== 'loop') { span.textContent = 'Loop'; use.setAttribute('href', '#i-loop'); }
+    else if (run.paused) { span.textContent = 'Resume'; use.setAttribute('href', '#i-play'); }
+    else { span.textContent = 'Pause'; use.setAttribute('href', '#i-pause'); }
+
+    $('loopnote').hidden = !(run.mode === 'loop' && run.paused);
+    $('loopnote-text').textContent = 'Loop paused after run ' + run.n + '. Press Resume to continue.';
+  }
+
+  function runOnce() {
+    run.busy = true;
+    run.n += 1;
+    var n = run.n;
+    var up = n % 2 === 1;
+    run.hist.push({ n: n, state: 'running' });
     resetSteps();
+    renderRunUi();
 
-    var target, alertId, mailBefore, t0;
+    var target, id, mailBefore, t0 = Date.now();
 
-    Promise.resolve()
-      .then(function () {
-        step('snapshot', 'running');
-        return poll();
-      })
-      .then(function (state) {
-        var price = currentPrice();
-        if (price === null) throw new Error('No price recorded yet — start the stack so price:watch is running.');
-        mailBefore = state.inbox.total;
-        target = (price + 25).toFixed(2);
-        step('snapshot', 'pass', 'price ' + fmt(price) + ', inbox holds ' + mailBefore);
-
-        step('create', 'running');
-        return api('POST', BASE + 'alerts', { target_price: target });
+    return Promise.resolve()
+      .then(function () { mark('snap', 'running'); return poll(); })
+      .then(function (s) {
+        var p = price();
+        if (p === null) throw new Error('No price recorded yet — start the stack so price:watch is running.');
+        if (!s.inbox.available) throw new Error('Mailpit is unreachable, so delivery cannot be verified.');
+        mailBefore = s.inbox.total;
+        target = (up ? p + 25 : p - 25).toFixed(2);
+        mark('snap', 'pass', 'price ' + fmt(p) + ', inbox holds ' + mailBefore);
+        mark('make', 'running');
+        return api('POST', 'alerts', { target_price: target });
       })
       .then(function (r) {
-        alertId = r.alert.id;
-        step('create', 'pass', 'alert #' + alertId + ' watching ' + r.alert.direction + ' ' + fmt(target));
-
-        step('push', 'running');
-        t0 = Date.now();
-        return pushPrices([(Number(target) - 10).toFixed(2), (Number(target) + 1).toFixed(2)]);
-      })
-      .then(function () {
-        step('push', 'pass', 'queued ' + fmt(Number(target) - 10) + ' then ' + fmt(Number(target) + 1));
-
-        step('deliver', 'running');
-        return waitFor(function (s) {
-          return s.inbox.available && s.inbox.total > mailBefore;
-        }, 30000, 'No email arrived within 30s — is a queue worker running?');
-      })
-      .then(function (ms) {
-        step('deliver', 'pass', 'email delivered', ms);
-
-        step('deleted', 'running');
-        return waitFor(function (s) {
-          return !(s.alerts || []).some(function (a) { return a.id === alertId; });
-        }, 10000, 'The alert row is still present after delivery.');
-      })
-      .then(function (ms) {
-        step('deleted', 'pass', 'alert #' + alertId + ' removed', ms);
-
-        step('once', 'running');
-        return pushPrices([(Number(target) + 5).toFixed(2)]).then(function () {
-          return new Promise(function (r) { setTimeout(r, 4000); });
-        }).then(poll).then(function (s) {
-          if (s.inbox.total > mailBefore + 1) throw new Error('A second email arrived; the alert fired twice.');
-          step('once', 'pass', 'one email total, no re-fire');
+        id = r.alert.id;
+        mark('make', 'pass', 'alert #' + id + ' watching ' + r.alert.direction + ' ' + fmt(target));
+        mark('walk', 'running');
+        var near = (up ? Number(target) - 10 : Number(target) + 10).toFixed(2);
+        var over = (up ? Number(target) + 1 : Number(target) - 1).toFixed(2);
+        return push([near, over]).then(function () {
+          mark('walk', 'pass', 'queued ' + fmt(near) + ' then ' + fmt(over));
         });
       })
       .then(function () {
-        verdict(true, 'All six checks passed');
-        toast('ok', 'End-to-end test passed');
+        mark('mail', 'running');
+        return waitFor(function (s) { return s.inbox.available && s.inbox.total > mailBefore; },
+          30000, 'No email arrived within 30s — is a queue worker running?');
+      })
+      .then(function (ms) {
+        mark('mail', 'pass', 'email delivered', ms);
+        mark('gone', 'running');
+        return waitFor(function (s) { return !(s.alerts || []).some(function (a) { return a.id === id; }); },
+          10000, 'The alert row is still present after delivery.');
+      })
+      .then(function (ms) {
+        mark('gone', 'pass', 'alert #' + id + ' removed', ms);
+        mark('once', 'running');
+        return push([(up ? Number(target) + 5 : Number(target) - 5).toFixed(2)])
+          .then(function () { return sleep(4000); })
+          .then(poll)
+          .then(function (s) {
+            if (s.inbox.total > mailBefore + 1) throw new Error('A second email arrived; the alert fired twice.');
+            mark('once', 'pass', 'one email total, no re-fire');
+          });
+      })
+      .then(function () {
+        var ms = Date.now() - t0;
+        run.pass += 1; run.ms.push(ms);
+        run.hist[run.hist.length - 1] = { n: n, state: 'pass', ms: ms };
+        verdict(true, 'Run ' + n + ': all six checks passed');
+        return true;
       })
       .catch(function (err) {
-        var running = $('steps').querySelector('[data-status="running"]');
-        if (running) step(running.dataset.step, 'fail', err.message);
-        verdict(false, 'Test failed');
-        toast('err', 'End-to-end test failed', err.message);
+        var running = $('steps').querySelector('[data-s="running"]');
+        if (running) mark(running.dataset.k, 'fail', err.message);
+        run.fail += 1;
+        run.hist[run.hist.length - 1] = { n: n, state: 'fail' };
+        verdict(false, 'Run ' + n + ' failed');
+        toast('err', 'Run ' + n + ' failed', err.message);
+        return false;
       })
-      .finally(function () {
-        testRunning = false;
-        btn.disabled = false;
-      });
+      .finally(function () { run.busy = false; renderRunUi(); });
+  }
+
+  $('btn-once').addEventListener('click', function () {
+    if (run.busy || run.mode === 'loop') return;
+    run.mode = 'once';
+    runOnce().finally(function () { run.mode = 'idle'; renderRunUi(); });
   });
 
-  // ---------------------------------------------------------------- boot
+  $('btn-loop').addEventListener('click', function () {
+    if (run.mode === 'loop') { run.paused = !run.paused; renderRunUi(); return; }
+    run.mode = 'loop'; run.paused = false; run.stop = false;
+    renderRunUi();
+    (function cycle() {
+      if (run.stop) { run.mode = 'idle'; run.paused = false; renderRunUi(); return; }
+      if (run.paused) { setTimeout(cycle, 300); return; }
+      runOnce().then(function () {
+        if (run.stop) { run.mode = 'idle'; renderRunUi(); return; }
+        setTimeout(cycle, Number($('loop-gap').value));
+      });
+    })();
+  });
+
+  $('btn-stop').addEventListener('click', function () {
+    run.stop = true; run.paused = false;
+    if (!run.busy) { run.mode = 'idle'; renderRunUi(); }
+    toast('ok', 'Loop stopping', run.busy ? 'The run in progress will finish first.' : undefined);
+  });
+
+  var dlg = $('confirm');
+  $('btn-reset').addEventListener('click', function () { dlg.showModal(); });
+  $('confirm-no').addEventListener('click', function () { dlg.close(); });
+  $('confirm-yes').addEventListener('click', function () {
+    dlg.close();
+    var b = $('btn-reset'); b.disabled = true;
+    run.stop = true; run.paused = false;
+    api('POST', 'reset').then(function (r) {
+      series = []; ticks = 0; hoverIx = null; lastAt = null;
+      run = { mode: 'idle', paused: false, stop: false, busy: false, n: 0, pass: 0, fail: 0, ms: [], hist: [] };
+      resetSteps(); renderRunUi();
+      $('chart-svg').innerHTML = ''; $('chart-none').hidden = false; $('legend').hidden = true;
+      toast('ok', 'Everything reset', r.alerts + ' alert(s), ' + r.queued + ' queued job(s) and the inbox cleared.');
+      poll();
+    }).catch(function (err) { toast('err', 'Reset failed', err.message); })
+      .finally(function () { b.disabled = false; });
+  });
 
   $('unit').textContent = cfg.unit;
   resetSteps();
+  renderRunUi();
   poll();
   setInterval(poll, POLL);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });

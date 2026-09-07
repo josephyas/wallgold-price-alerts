@@ -16,4 +16,7 @@ interface ScriptedPrices
     public function pull(): ?Price;
 
     public function push(Price ...$prices): void;
+
+    /** Forget every price still queued. */
+    public function clear(): void;
 }

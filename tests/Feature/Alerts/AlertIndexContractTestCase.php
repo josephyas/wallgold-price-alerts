@@ -225,6 +225,22 @@ abstract class AlertIndexContractTestCase extends TestCase
     }
 
     #[Test]
+    public function purging_empties_the_index_and_marks_it_not_ready(): void
+    {
+        $this->index->rebuild([
+            new IndexEntry(1, Direction::Above, Price::fromDecimal('2700')),
+            new IndexEntry(2, Direction::Below, Price::fromDecimal('2600')),
+        ]);
+        $this->index->pop($this->quote('2750'), 10);
+
+        $this->index->purge();
+
+        self::assertSame(['above' => 0, 'below' => 0, 'inflight' => 0], $this->index->sizes());
+        self::assertFalse($this->index->isReady());
+        self::assertNull($this->index->pop($this->quote('2700'), 10));
+    }
+
+    #[Test]
     public function entries_can_be_added_in_bulk(): void
     {
         $this->index->rebuild([]);

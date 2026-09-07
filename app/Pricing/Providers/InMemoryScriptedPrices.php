@@ -21,4 +21,9 @@ final class InMemoryScriptedPrices implements ScriptedPrices
     {
         array_push($this->queue, ...$prices);
     }
+
+    public function clear(): void
+    {
+        $this->queue = [];
+    }
 }
