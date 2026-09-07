@@ -82,9 +82,9 @@ return [
     'max_alerts_per_user' => (int) env('GOLD_MAX_ALERTS_PER_USER', 100),
 
     'goldapi' => [
-        'url' => env('GOLD_API_URL', 'https://www.goldapi.io/api/XAU/USD'),
-        'token' => env('GOLD_API_TOKEN', ''),
-        'timeout' => (float) env('GOLD_API_TIMEOUT', 2.0),
+        'url' => env('GOLDAPI_URL', 'https://www.goldapi.io/api/XAU/USD'),
+        'token' => env('GOLDAPI_TOKEN', ''),
+        'timeout' => (float) env('GOLDAPI_TIMEOUT', 2.0),
     ],
 
 ];

@@ -1,11 +1,13 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "josephyas/wallgold-price-alerts",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "Gold price alerts on Laravel: Redis-indexed targets, delivered by email exactly once with the lowest tick-to-email latency.",
     "keywords": [
+        "gold",
+        "price-alerts",
         "laravel",
-        "framework"
+        "redis"
     ],
     "license": "MIT",
     "require": {
