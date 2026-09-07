@@ -241,6 +241,30 @@ All endpoints live under `/api`, speak JSON, and are rate limited (`GOLD_API_RAT
 
 Validation failures and rule violations (equal to the current price, would trigger immediately, duplicate, limit) return 422 with an `errors` object; missing or revoked tokens return 401; another user's alert returns 403; exceeding a limit returns 429. A user may hold one alert per level and side; a previous alert at the same level that ended in `failed` is replaced automatically.
 
+## Postman
+
+`postman/` holds a collection and a local environment covering every endpoint:
+
+```
+postman/wallgold-price-alerts.postman_collection.json
+postman/wallgold-price-alerts.postman_environment.json
+```
+
+Import both into Postman, run **Authentication > Request a token** (it signs in as the seeded demo user and stores the
+token every other request uses), then work through the folders. Pressing **Run** executes the whole collection: it
+registers a user, reads the price, creates two alerts, lists and inspects them, checks the error responses, then
+cancels the alerts and logs out, so it can be run repeatedly.
+
+Each request carries a description of the rule it demonstrates, and each has tests, so the collection doubles as an
+executable specification of the API:
+
+```bash
+npx newman run postman/wallgold-price-alerts.postman_collection.json \
+  -e postman/wallgold-price-alerts.postman_environment.json
+```
+
+To watch an alert fire, create one and walk the price across it with `make push PRICES="2740 2751"`.
+
 ## Operations
 
 - **Processes.** One watcher, as many workers as the mail volume needs, one scheduler. All three are ordinary Artisan commands; the Compose file runs them as services and restarts them, and under Supervisor or systemd the same commands apply (`price:watch -v`, `queue:work redis --queue=alerts,default --sleep=0.1 --tries=3 --timeout=60 --max-time=3600`, `schedule:work` or a cron entry for `schedule:run`).

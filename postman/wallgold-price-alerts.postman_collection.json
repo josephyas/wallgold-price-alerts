@@ -1,0 +1,876 @@
+{
+  "info": {
+    "_postman_id": "bf1f5e74-d4ae-58be-8d2f-42610456d92f",
+    "name": "Wallgold Price Alerts",
+    "description": "Gold price alerts on Laravel: register a target price, get emailed once when the price reaches or crosses it, and the alert is deleted.\n\n## Getting started\n\n1. Start the stack: `make up`. The API listens on http://localhost:8000 and Mailpit on http://localhost:8025.\n2. Run **Authentication > Request a token**. It signs in as the seeded demo user and stores the bearer token in the `token` variable, which every other request uses.\n3. Work through the folders in order, or press **Run** to execute the whole collection: it registers a user, reads the price, creates two alerts, lists and inspects them, checks the error responses, then cancels the alerts and logs out.\n\n## Seeing an alert fire\n\nThe price feed is mocked, so it can be steered. After creating an alert at, say, 2750:\n\n```bash\nmake push PRICES=\"2740 2751\"\nmake watch            # the tick that matches\n```\n\nThe email reaches Mailpit within milliseconds, and `GET /api/alerts/{id}` then answers 404 because a delivered alert is removed.\n\n## Conventions\n\n- Authentication is a Sanctum bearer token, set once at collection level.\n- Prices are strings with four decimals, so nothing is lost to floating point.\n- Validation and domain-rule failures answer 422 with an `errors` object; a missing token 401, another user's alert 403, an unknown alert 404, cancelling during delivery 409, and exceeding a rate limit 429 (60 requests a minute per user, 10 for the authentication endpoints).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "Registering, exchanging credentials for a bearer token, and checking who the token belongs to.",
+      "item": [
+        {
+          "name": "Register a new user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates an account and returns a bearer token.\n\nThe pre-request script generates a unique email so the request can be replayed; the token is stored in the `token` collection variable, which every other request uses.\n\nThe password must satisfy Laravel's default rules (at least eight characters).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sara\",\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"{{newUserPassword}}\",\n  \"device_name\": \"postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh email each run, so this request can be replayed.",
+                  "pm.collectionVariables.set('newUserEmail', `sara.${Date.now()}@example.com`);",
+                  "pm.collectionVariables.set('newUserPassword', 'correct-horse-battery');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('returns a bearer token and the user', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.token_type).to.eql('Bearer');",
+                  "    pm.expect(body.user.email).to.eql(pm.collectionVariables.get('newUserEmail'));",
+                  "    pm.expect(body.user).to.not.have.property('password');",
+                  "});",
+                  "",
+                  "// Every later request authenticates as this user.",
+                  "pm.collectionVariables.set('token', pm.response.json().token);",
+                  "pm.collectionVariables.set('email', pm.collectionVariables.get('newUserEmail'));",
+                  "pm.collectionVariables.set('password', pm.collectionVariables.get('newUserPassword'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request a token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "token"
+              ]
+            },
+            "description": "Exchanges credentials for a bearer token.\n\nDefaults to the seeded demo account (`demo@example.com` / `password`), so this request works on its own right after `make up`. Once *Register a new user* has run, it uses that account instead.\n\nWrong credentials answer 422 with one generic message, so the response never reveals whether an email exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns a bearer token', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.token_type).to.eql('Bearer');",
+                  "});",
+                  "pm.collectionVariables.set('token', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Returns the authenticated user. Useful for checking that the `token` variable is set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns the current user', () => {",
+                  "    pm.expect(pm.response.json().data).to.have.all.keys('id', 'name', 'email');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Price",
+      "description": "The last price the watcher recorded.",
+      "item": [
+        {
+          "name": "Current gold price",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "price"
+              ]
+            },
+            "description": "The last price the watcher recorded, with the moment it was observed and whether it has gone stale.\n\nAnswers **503** until the first tick, so start the stack (`make up`) and let `price:watch` run.\n\nThe price is stored in `currentPrice`; the requests that follow place their targets relative to it."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK (503 means the watcher has not ticked yet)', () => pm.response.to.have.status(200));",
+                  "pm.test('reports a price with its unit and freshness', () => {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(Number(data.price)).to.be.above(0);",
+                  "    pm.expect(data.unit).to.be.a('string');",
+                  "    pm.expect(data.stale).to.be.a('boolean');",
+                  "});",
+                  "",
+                  "// Later requests place their targets around this price.",
+                  "pm.collectionVariables.set('currentPrice', pm.response.json().data.price);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "description": "Creating, listing and inspecting your own alerts.",
+      "item": [
+        {
+          "name": "Create an alert (direction inferred)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "Creates an alert above the current price and lets the service infer the direction.\n\nThe target is placed 100 above the last known price, so the alert waits rather than firing at once. The response carries the inferred `direction` and the `reference_price` the decision was made against.\n\nA target *equal* to the current price is refused as ambiguous: it is already reached and neither side can be inferred. Send an explicit `direction` in that case.\n\nTo watch it fire, walk the price across the target:\n\n```bash\nmake push PRICES=\"2740 2751\"   # for a target of 2750\nmake watch\n```\n\nThe email arrives in Mailpit (http://localhost:8025) within milliseconds and the alert is then deleted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_price\": \"{{targetAbove}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Place the target above the last known price so the alert waits.",
+                  "const current = Number(pm.collectionVariables.get('currentPrice') || 2650);",
+                  "pm.collectionVariables.set('targetAbove', (current + 100).toFixed(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('infers the direction from the current price', () => {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.direction).to.eql('above');",
+                  "    pm.expect(data.status).to.eql('active');",
+                  "    pm.expect(data.triggered_at).to.eql(null);",
+                  "});",
+                  "pm.collectionVariables.set('alertId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create an alert (explicit direction)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "Creates an alert with the direction stated outright.\n\nAn explicit direction is accepted as long as the current price does not already satisfy it, and it is the only way to create an alert while no fresh price is known (before the first tick, or during a Redis outage).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_price\": \"{{targetBelow}}\",\n  \"direction\": \"below\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const current = Number(pm.collectionVariables.get('currentPrice') || 2650);",
+                  "pm.collectionVariables.set('targetBelow', (current - 100).toFixed(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('keeps the direction that was asked for', () => {",
+                  "    pm.expect(pm.response.json().data.direction).to.eql('below');",
+                  "});",
+                  "pm.collectionVariables.set('alertIdBelow', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts?per_page=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "The caller's own alerts, newest first, paginated.\n\n`status` filters by `active`, `sending` or `failed`; `per_page` accepts 1 to 100. Delivered alerts are deleted, so this list only ever shows alerts that still have work to do."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns a paginated list of my alerts', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    pm.expect(body.meta.total).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Show an alert",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                "{{alertId}}"
+              ]
+            },
+            "description": "One alert, if it belongs to the caller.\n\nAnother user's alert answers 403; an id that never existed, or one whose alert has been delivered, answers 404."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('is the alert that was created', () => {",
+                  "    pm.expect(pm.response.json().data.id).to.eql(Number(pm.collectionVariables.get('alertId')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error cases",
+      "description": "The responses a client has to handle: rejected input, refused rules, and missing or foreign resources.",
+      "item": [
+        {
+          "name": "Malformed target price",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "Validation mirrors the price value object exactly: a positive number with at most four decimals. A leading sign, a leading or trailing dot, and scientific notation are all refused with 422 rather than failing deeper in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_price\": \"+2700.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Content', () => pm.response.to.have.status(422));",
+                  "pm.test('names the offending field', () => {",
+                  "    pm.expect(pm.response.json().errors).to.have.property('target_price');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "A user may hold one alert per level and side, so re-creating the alert made earlier in this run is refused.\n\nAn alert at the same level that previously ended in `failed` is the exception: it is replaced automatically.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_price\": \"{{targetAbove}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Content', () => pm.response.to.have.status(422));",
+                  "pm.test('says the alert already exists', () => {",
+                  "    pm.expect(JSON.stringify(pm.response.json().errors)).to.include('already have an alert');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Alert that would trigger immediately",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "An explicit direction that the current price already satisfies is refused, so a client cannot accidentally create an alert that fires on the very next tick.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_price\": \"{{targetBelow}}\",\n  \"direction\": \"above\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable Content', () => pm.response.to.have.status(422));",
+                  "pm.test('explains that it would trigger at once', () => {",
+                  "    pm.expect(JSON.stringify(pm.response.json().errors)).to.include('immediately');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Without a token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts"
+              ]
+            },
+            "description": "Every alert and price endpoint requires a bearer token.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "An alert that does not exist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                "999999"
+              ]
+            },
+            "description": "An unknown id answers 404. A delivered alert answers 404 too, because it is deleted once the email goes out."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Clean up",
+      "description": "Cancels the alerts this run created and ends the session. Run last.",
+      "item": [
+        {
+          "name": "Cancel an alert",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{{alertId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                "{{alertId}}"
+              ]
+            },
+            "description": "Removes an alert before it fires.\n\nAnswers **409** while a worker is emailing that alert: the delivery finishes and deletes the row itself."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel the second alert",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts/{{alertIdBelow}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "alerts",
+                "{{alertIdBelow}}"
+              ]
+            },
+            "description": "Removes the other alert, so the collection leaves nothing behind and can be run again."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log out",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the token used for this request and leaves the account's other tokens alone."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "demo@example.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "password",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "currentPrice",
+      "value": "2650.0000",
+      "type": "string"
+    },
+    {
+      "key": "targetAbove",
+      "value": "2750.00",
+      "type": "string"
+    },
+    {
+      "key": "targetBelow",
+      "value": "2550.00",
+      "type": "string"
+    },
+    {
+      "key": "alertId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "alertIdBelow",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "newUserEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "newUserPassword",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
