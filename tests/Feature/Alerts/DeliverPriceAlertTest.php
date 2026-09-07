@@ -172,6 +172,43 @@ final class DeliverPriceAlertTest extends TestCase
     }
 
     #[Test]
+    public function any_failure_before_the_message_is_accepted_releases_the_claim(): void
+    {
+        $this->mock(MailChannel::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('send')->once()->andThrow(new RuntimeException('The mail template is broken'));
+        });
+        $alert = PriceAlert::factory()->above('2700')->create();
+        $quote = $this->popped($alert, '2701.25');
+
+        try {
+            $this->deliver(new DeliverPriceAlert($alert->id, $quote));
+            self::fail('The exception should propagate so the queue retries the job.');
+        } catch (RuntimeException $e) {
+            self::assertSame('The mail template is broken', $e->getMessage());
+        }
+
+        self::assertSame(AlertStatus::Active, $alert->fresh()?->status, 'the next attempt can claim it again');
+        self::assertSame(1, $this->index->sizes()['inflight']);
+    }
+
+    #[Test]
+    public function a_row_that_vanished_after_being_loaded_is_acknowledged_without_sending(): void
+    {
+        Notification::fake();
+        $alert = PriceAlert::factory()->above('2700')->create();
+        $quote = $this->popped($alert, '2701.25');
+        // The user cancels between the job loading the row and claiming it.
+        PriceAlert::retrieved(function (PriceAlert $loaded) use ($alert): void {
+            PriceAlert::query()->whereKey($alert->id)->delete();
+        });
+
+        $this->deliver(new DeliverPriceAlert($alert->id, $quote));
+
+        Notification::assertNothingSent();
+        self::assertSame(0, $this->index->sizes()['inflight']);
+    }
+
+    #[Test]
     public function giving_up_marks_the_alert_failed_and_acknowledges_the_index(): void
     {
         $alert = PriceAlert::factory()->sending()->above('2700')->create();

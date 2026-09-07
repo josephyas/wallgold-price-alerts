@@ -19,7 +19,6 @@ use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 /**
@@ -68,18 +67,27 @@ final class DeliverPriceAlert implements ShouldQueue
         }
 
         if (! $this->claim($alert, (int) $config->get('gold.delivery.stale_after_seconds'))) {
+            if (! PriceAlert::query()->whereKey($alert->id)->exists()) {
+                // The row vanished between loading and claiming (cancelled, or already
+                // delivered by another worker): nothing is owed any more.
+                $index->ack($alert->id, $this->quote->price);
+
+                return;
+            }
+
             // Another worker owns this delivery right now; it will acknowledge the index when done.
             Log::info('price-alert.claim-lost', ['alert_id' => $alert->id]);
 
             return;
         }
 
-        $alert->refresh();
-
         try {
+            $alert->refresh();
             $alert->user->notifyNow(new PriceAlertTriggered($alert, $this->quote));
-        } catch (TransportExceptionInterface $e) {
-            // The mail server refused the message before accepting it, so retrying from "active" is safe.
+        } catch (Throwable $e) {
+            // Nothing runs after the transport accepts the message (there are no
+            // NotificationSent listeners), so any exception here means it was not
+            // sent: hand the claim back and let the queue retry with backoff.
             $this->releaseClaim($alert, $e);
 
             throw $e;
