@@ -146,7 +146,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 | The mail server refuses the message (or anything fails before it accepts) | The claim is released back to `active` and the job is retried after 5 s and again after 30 s; after the third failure the alert is marked `failed` for the user to see. |
 | Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
 | Redis loses its data (flushed, or restarted without persistence) | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. With the Compose setup Redis persists to an append-only file, so a plain restart keeps the index; writes lost in the last fsync window are found missing and added back by reconcile within a minute. |
-| Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile finds the row missing from the index within a minute and adds it back. `GET /api/price` answers 503 meanwhile. |
+| Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile finds the row missing from the index within a minute and adds it back. `GET /api/price` answers 503 meanwhile. The API rate limiter lives in the database store (`CACHE_LIMITER_STORE`), so the API itself stays up. |
 | The user cancels while the alert is being delivered | The conditional delete refuses with 409 until the delivery finishes (and deletes the row itself). |
 | The price gaps over several targets in one tick | All of them fire, each once. |
 | The price bounces around a target | It fires on the first crossing; the alert is gone afterwards. |
@@ -217,6 +217,7 @@ The rebuild also takes a `price-alerts:index:rebuild` lock in the cache store so
 | `GOLD_DELIVERY_STALE_AFTER_SECONDS` | `120` | a `sending` claim older than this can be taken over |
 | `GOLD_MAX_ALERTS_PER_USER` | `100` | stored alerts per user |
 | `GOLD_API_RATE_PER_MINUTE` | `60` | API requests per user per minute |
+| `CACHE_LIMITER_STORE` | `database` | cache store behind the API rate limiter; kept off Redis so an index outage cannot take the API down |
 | `REDIS_QUEUE_BLOCK_FOR` | `5` | seconds a worker blocks on `BLPOP` |
 | `REDIS_QUEUE_RETRY_AFTER` | `90` | must exceed the job timeout (60) |
 

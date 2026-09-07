@@ -21,6 +21,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rate Limiter Store
+    |--------------------------------------------------------------------------
+    |
+    | The API throttle runs before any controller, so it must not share the
+    | alert index's Redis: an index outage would otherwise take the whole API
+    | down with it. The database store is always available.
+    |
+    */
+
+    'limiter' => env('CACHE_LIMITER_STORE', 'database'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
     |

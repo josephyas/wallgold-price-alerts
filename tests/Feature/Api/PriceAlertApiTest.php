@@ -12,9 +12,12 @@ use App\Models\PriceAlert;
 use App\Models\User;
 use App\Pricing\Price;
 use App\Pricing\PriceQuote;
+use App\Providers\AppServiceProvider;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Facade;
 use Laravel\Sanctum\Sanctum;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\Test;
@@ -261,6 +264,28 @@ final class PriceAlertApiTest extends TestCase
         $this->app->singleton(AlertIndex::class, fn (): AlertIndex => $this->index);
         $this->artisan('alerts:reconcile')->assertSuccessful();
         self::assertSame([$id], $this->index->pop($this->quote('2700'), 10));
+    }
+
+    #[Test]
+    public function the_api_stays_up_while_the_redis_cache_store_is_unreachable(): void
+    {
+        // The compose stack keeps the cache on Redis; the rate limiter must not.
+        config()->set('cache.default', 'redis');
+        config()->set('cache.limiter', 'database');
+        config()->set('database.redis.cache.port', 1);
+        config()->set('database.redis.default.port', 1);
+        $this->app->forgetInstance('cache');
+        $this->app->forgetInstance('cache.store');
+        $this->app->forgetInstance(RateLimiter::class);
+        Facade::clearResolvedInstance(RateLimiter::class);
+        (new AppServiceProvider($this->app))->boot(); // re-register the named "api" limiter on the fresh instance
+        $this->mock(AlertIndex::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('currentPrice')->andThrow(new RedisException('Connection refused'));
+            $mock->shouldReceive('add')->andThrow(new RedisException('Connection refused'));
+        });
+
+        $this->postJson('/api/alerts', ['target_price' => '2700', 'direction' => 'above'])->assertCreated();
+        $this->getJson('/api/alerts')->assertOk()->assertHeader('X-RateLimit-Limit');
     }
 
     #[Test]
