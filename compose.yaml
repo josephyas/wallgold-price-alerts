@@ -8,7 +8,9 @@ x-app: &app
   image: wallgold-price-alerts:local
   # The application reads .env as a file (not as injected variables), so the
   # test suite's own settings in phpunit.xml still take precedence inside the
-  # container. Only service hostnames are pinned here.
+  # container. Service hostnames, ports and drivers are pinned here so a .env
+  # edited for bare metal cannot break the stack; `make test` unsets the
+  # drivers before running PHPUnit.
   volumes:
     - type: bind
       source: ./.env
@@ -17,10 +19,14 @@ x-app: &app
       bind:
         create_host_path: false   # fail clearly when .env is missing instead of creating a directory
   environment:
+    DB_CONNECTION: mysql
     DB_HOST: mysql
     DB_PORT: "3306"
+    QUEUE_CONNECTION: redis
+    CACHE_STORE: redis
     REDIS_HOST: redis
     REDIS_PORT: "6379"
+    MAIL_MAILER: smtp
     MAIL_HOST: mailpit
     MAIL_PORT: "1025"
   restart: unless-stopped

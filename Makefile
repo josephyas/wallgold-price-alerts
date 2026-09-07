@@ -45,7 +45,7 @@ push:
 
 ## Run the test suite inside the container (SQLite in memory, Redis from the stack when running).
 test: .env
-	$(COMPOSE) run --rm --no-deps app php artisan test
+	$(COMPOSE) run --rm --no-deps app sh -c 'unset DB_CONNECTION QUEUE_CONNECTION CACHE_STORE MAIL_MAILER; exec php artisan test'
 
 .env:
 	cp .env.example .env
