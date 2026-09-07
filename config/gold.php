@@ -43,6 +43,21 @@ return [
 
     'redis_connection' => env('GOLD_REDIS_CONNECTION', 'default'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Delivery
+    |--------------------------------------------------------------------------
+    |
+    | A delivery is claimed with a conditional update before the email goes
+    | out. A claim older than this that never completed is treated as
+    | abandoned (the worker died mid-send) and may be claimed again.
+    |
+    */
+
+    'delivery' => [
+        'stale_after_seconds' => (int) env('GOLD_DELIVERY_STALE_AFTER_SECONDS', 120),
+    ],
+
     'goldapi' => [
         'url' => env('GOLD_API_URL', 'https://www.goldapi.io/api/XAU/USD'),
         'token' => env('GOLD_API_TOKEN', ''),

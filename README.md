@@ -60,3 +60,9 @@ Every provider returns a quote (price, observation time, source) or throws `Pric
 Active alerts are mirrored into two Redis sorted sets, `alerts:above` and `alerts:below`, scored by target price in minor units with the alert id as member. A price tick is a single Lua script that takes every "above" alert at or under the price and every "below" alert at or over it, removes them from their sets and parks them in `alerts:inflight` until the delivery acknowledges them. Because the script is atomic, several tickers can run at once without popping the same alert twice, and the lookup costs O(log N + hits) however many alerts exist.
 
 The index is a projection, not the record of truth: `alerts:ready` says whether it has been built from the database since Redis last started, and it can be rebuilt at any time without touching in-flight entries. The same contract has an in-memory implementation that the test suite uses, so the suite runs without Redis; tests marked `redis` exercise the real scripts when a Redis is reachable and are mandatory in CI.
+
+## Delivery
+
+Each popped alert becomes one `DeliverPriceAlert` job on the `alerts` queue. The job claims the row with a single conditional update (`active` to `sending`), which is atomic on every supported database, so two jobs for the same alert cannot both send. It then emails the user with the new price, deletes the row, and acknowledges the in-flight entry in the index.
+
+A message the mail server refuses puts the alert back to `active` and lets the queue retry with backoff; after the last attempt the row is marked `failed` so the user can see it. A claim that never completes (the worker died mid-send) becomes claimable again after `GOLD_DELIVERY_STALE_AFTER_SECONDS`, which favours a rare duplicate over a silent miss.
