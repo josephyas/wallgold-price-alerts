@@ -45,3 +45,12 @@ The test suite uses an in-memory SQLite database and needs no services:
 composer install
 php artisan test
 ```
+
+## Price feed
+
+The global gold price comes from a `PriceProvider` selected by `GOLD_PRICE_PROVIDER`:
+
+- `fake` (default): a seeded random walk starting at `GOLD_FAKE_START` that moves at most `GOLD_FAKE_MAX_STEP` per tick. It can be steered to exact values for demos.
+- `goldapi`: XAU/USD from goldapi.io using `GOLD_API_URL` and `GOLD_API_TOKEN`.
+
+Every provider returns a quote (price, observation time, source) or throws `PriceUnavailable`, so callers can back off without inspecting provider-specific errors. Prices are handled with four decimal places as exact integers.

@@ -32,5 +32,6 @@
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
+        <env name="GOLD_PRICE_PROVIDER" value="fake" force="true"/>
     </php>
 </phpunit>

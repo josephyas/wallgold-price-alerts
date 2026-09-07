@@ -4,23 +4,50 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Pricing\Contracts\PriceProvider;
+use App\Pricing\Contracts\ScriptedPrices;
+use App\Pricing\Price;
+use App\Pricing\Providers\FakePriceProvider;
+use App\Pricing\Providers\GoldApiPriceProvider;
+use App\Pricing\Providers\InMemoryScriptedPrices;
+use Illuminate\Contracts\Config\Repository as Config;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
-        //
+        $this->app->singleton(ScriptedPrices::class, InMemoryScriptedPrices::class);
+
+        $this->app->singleton(PriceProvider::class, function (Application $app): PriceProvider {
+            /** @var Config $config */
+            $config = $app->make(Config::class);
+            $provider = (string) $config->get('gold.provider');
+
+            return match ($provider) {
+                'fake' => new FakePriceProvider(
+                    start: Price::fromDecimal((string) $config->get('gold.fake.start')),
+                    maxStep: Price::fromDecimal((string) $config->get('gold.fake.max_step')),
+                    seed: $config->get('gold.fake.seed') === null ? null : (int) $config->get('gold.fake.seed'),
+                    script: $app->make(ScriptedPrices::class),
+                ),
+                'goldapi' => new GoldApiPriceProvider(
+                    http: $app->make(Http::class),
+                    url: (string) $config->get('gold.goldapi.url'),
+                    token: (string) $config->get('gold.goldapi.token'),
+                    timeout: (float) $config->get('gold.goldapi.timeout'),
+                ),
+                default => throw new InvalidArgumentException(sprintf('Unknown gold price provider [%s].', $provider)),
+            };
+        });
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
-        //
+        Model::shouldBeStrict(! $this->app->isProduction());
     }
 }
