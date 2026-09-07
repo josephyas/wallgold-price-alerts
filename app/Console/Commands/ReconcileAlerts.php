@@ -134,10 +134,12 @@ final class ReconcileAlerts extends Command
             return 0;
         }
 
+        // The in-flight score is the tick that hit the alert; keep it as the
+        // observation time so the email and triggered_at stay truthful.
         $jobs = array_map(
             fn (InflightEntry $entry): DeliverPriceAlert => new DeliverPriceAlert(
                 $entry->id,
-                new PriceQuote($entry->price, CarbonImmutable::now(), 'reconcile'),
+                new PriceQuote($entry->price, CarbonImmutable::createFromTimestampMs($entry->poppedAtMs, 'UTC'), 'reconcile'),
             ),
             $lost,
         );

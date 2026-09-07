@@ -104,6 +104,7 @@ final class ReconcileAlertsCommandTest extends TestCase
     {
         $alert = PriceAlert::factory()->above('2700')->create();
         $this->index->add($alert->id, Direction::Above, Price::fromDecimal('2700'));
+        $poppedAt = CarbonImmutable::now();
         $this->index->pop($this->quote('2701.25'), 10);
 
         $this->artisan('alerts:reconcile')->expectsOutputToContain('0 lost delivery(ies) requeued')->assertSuccessful();
@@ -115,6 +116,7 @@ final class ReconcileAlertsCommandTest extends TestCase
 
         Queue::assertPushedOn('alerts', DeliverPriceAlert::class, fn (DeliverPriceAlert $job): bool => $job->alertId === $alert->id
             && $job->quote->price->toDecimal() === '2701.2500'
+            && $job->quote->observedAt->equalTo($poppedAt)
             && $job->quote->source === 'reconcile');
 
         // Touched: it will not be reported again until the window passes once more.
