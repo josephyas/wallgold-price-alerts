@@ -75,7 +75,7 @@ Composer has no ArvanCloud mirror; `COMPOSER_MIRROR` accepts any Packagist-compa
 
 ### Bare metal
 
-PHP 8.4 with the `redis`, `pcntl`, `bcmath`, `intl` and `pdo_sqlite` extensions, Composer, and a Redis (`docker compose up -d redis mailpit` is enough). In `.env`:
+PHP 8.4 with the `redis`, `pcntl`, `bcmath`, `intl` and `pdo_sqlite` extensions, Composer, and a Redis (`docker compose up -d redis mailpit` publishes both on loopback). In `.env`:
 
 ```dotenv
 DB_CONNECTION=sqlite
@@ -90,7 +90,7 @@ Then, in separate terminals:
 
 ```bash
 composer install && php artisan key:generate && php artisan migrate --seed
-php artisan serve
+php artisan serve --no-reload
 php artisan queue:work redis --queue=alerts,default --sleep=0.1 --tries=3 --timeout=60
 php artisan price:watch -v
 php artisan schedule:work
@@ -254,7 +254,7 @@ php artisan test          # SQLite in memory, no services needed
 composer check            # Pint, Larastan (level 6), tests
 ```
 
-Tests marked `redis` exercise the real Lua scripts against a dedicated Redis database and are skipped when no Redis is reachable; `docker compose up -d redis` and `REDIS_HOST=127.0.0.1 REDIS_REQUIRED=1 composer check` makes them mandatory, which is what CI does.
+Tests marked `redis` exercise the real Lua scripts against a dedicated Redis database and are skipped when no Redis is reachable; `docker compose up -d redis` (published on `127.0.0.1:6379`) and `REDIS_HOST=127.0.0.1 REDIS_REQUIRED=1 composer check` makes them mandatory, which is what CI does.
 
 What is covered: the value objects and direction rules; both index implementations through one shared contract (including the atomic pop, batching, in-flight tracking and rebuild); the providers with faked HTTP; the delivery job's every path (send once, missing row, failed row, stale entry, lost claim, abandoned claim, refused message, final failure); the matcher (gaps, bounces, sides, batching, rebuild); the watcher (single tick, failure, backoff); reconcile (each repair, and the idle-queue rule); the API (rules, ownership, throttling); and the end-to-end flow through the real HTTP layer and watcher command, against both indexes.
 

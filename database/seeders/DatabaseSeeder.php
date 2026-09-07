@@ -20,6 +20,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Demo data only: a well-known account has no place in production.
+        if (app()->isProduction()) {
+            return;
+        }
+
         $user = User::query()->firstOrCreate(
             ['email' => 'demo@example.com'],
             ['name' => 'Demo User', 'password' => Hash::make('password')],

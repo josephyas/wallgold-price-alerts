@@ -10,11 +10,17 @@ x-app: &app
   # test suite's own settings in phpunit.xml still take precedence inside the
   # container. Only service hostnames are pinned here.
   volumes:
-    - ./.env:/app/.env:ro
+    - type: bind
+      source: ./.env
+      target: /app/.env
+      read_only: true
+      bind:
+        create_host_path: false   # fail clearly when .env is missing instead of creating a directory
   environment:
     DB_HOST: mysql
     DB_PORT: "3306"
     REDIS_HOST: redis
+    REDIS_PORT: "6379"
     MAIL_HOST: mailpit
     MAIL_PORT: "1025"
   restart: unless-stopped
@@ -71,7 +77,9 @@ services:
     image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/library/redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Loopback only: the worker deserialises whatever lands on the queue, so
+      # Redis must never be reachable from the network.
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -102,6 +110,7 @@ services:
     image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/axllent/mailpit:latest
     ports:
       - "${MAILPIT_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
     restart: unless-stopped
 
 volumes:

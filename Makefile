@@ -1,6 +1,9 @@
 COMPOSE ?= docker compose
 
-APP_PORT ?= 8000
+APP_PORT ?= $(shell sed -n 's/^APP_PORT=//p' .env 2>/dev/null)
+ifeq ($(strip $(APP_PORT)),)
+APP_PORT := 8000
+endif
 PRICES ?= 2690 2701.25
 
 .PHONY: up down build logs watch shell test token push
@@ -33,7 +36,7 @@ shell:
 
 ## Print a bearer token for the seeded demo user.
 token:
-	@curl -s -X POST localhost:$(APP_PORT)/api/auth/token -H 'Accept: application/json' -H 'Content-Type: application/json' \
+	@curl -sS --fail -X POST localhost:$(APP_PORT)/api/auth/token -H 'Accept: application/json' -H 'Content-Type: application/json' \
 		-d '{"email":"demo@example.com","password":"password","device_name":"make"}' | sed -E 's/.*"token":"([^"]+)".*/\1/'
 
 ## Steer the fake price feed, e.g. make push PRICES="2690 2701.25"

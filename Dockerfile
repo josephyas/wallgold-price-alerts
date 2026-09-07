@@ -31,10 +31,12 @@ ENV COMPOSER_HOME=/tmp/composer
 
 COPY --chown=app:app composer.json composer.lock ./
 RUN if [ -n "$COMPOSER_MIRROR" ]; then composer config -g repos.packagist composer "$COMPOSER_MIRROR"; fi \
-    && composer install --no-interaction --prefer-dist --no-scripts --no-autoloader --no-progress
+    && composer install --no-interaction --prefer-dist --no-scripts --no-autoloader --no-progress \
+    && composer clear-cache
 
 COPY --chown=app:app . .
 RUN composer dump-autoload --optimize --no-interaction
 
 ENTRYPOINT ["docker/entrypoint.sh"]
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# --no-reload lets the built-in server honour PHP_CLI_SERVER_WORKERS.
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]
