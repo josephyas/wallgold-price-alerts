@@ -123,7 +123,7 @@ final class PriceAlertApiTest extends TestCase
     {
         $this->recordPrice('2650');
 
-        foreach (['-1', '0', 'abc', '2700.12345', '', null] as $invalid) {
+        foreach (['-1', '0', 'abc', '2700.12345', '', null, '+2700', '2700.', '.5', '1e3'] as $invalid) {
             $this->postJson('/api/alerts', ['target_price' => $invalid])->assertUnprocessable()->assertJsonValidationErrors(['target_price']);
         }
 

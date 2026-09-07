@@ -6,6 +6,7 @@ namespace App\Http\Requests;
 
 use App\Alerts\Direction;
 use App\Pricing\Price;
+use App\Pricing\Rules\ValidPrice;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -17,7 +18,7 @@ final class StorePriceAlertRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'target_price' => ['required', 'numeric', 'gt:0', 'decimal:0,'.Price::SCALE, 'max:99999999999'],
+            'target_price' => ['required', 'numeric', 'gt:0', 'decimal:0,'.Price::SCALE, 'max:99999999999', new ValidPrice],
             'direction' => ['nullable', 'string', Rule::enum(Direction::class)],
         ];
     }
