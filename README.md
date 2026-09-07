@@ -1,8 +1,25 @@
 # Wallgold Price Alerts
 
-Gold price alert service built on Laravel 13. A user registers a target gold price; when the global price reaches or crosses it, the user is emailed the new price once and the alert is removed.
+[![CI](https://github.com/josephyas/wallgold-price-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/josephyas/wallgold-price-alerts/actions/workflows/ci.yml)
 
-The service is API-only: there is no frontend, the root route returns service metadata and `/up` is the health check.
+A gold price alert service on Laravel 13. A user registers a target price; when the global gold price reaches or crosses it, the user is emailed the new price **once** and the alert is deleted. The design goal is the lowest possible delay between the price tick and the email, with exactly-once delivery under concurrency and failure.
+
+The service is API-only. The price feed and the mailer are behind interfaces and mocked by default: a seeded random walk stands in for the feed, and Mailpit (or the log) receives the mail.
+
+```mermaid
+flowchart LR
+    Feed[(Price feed)] -->|fetch every N ms| Watcher[price:watch]
+    Watcher -->|one atomic EVAL: pop hits| Redis[(Redis sorted sets)]
+    Watcher -->|pipelined push| Queue[(alerts queue)]
+    Queue -->|BLPOP wake-up| Worker[queue:work]
+    Worker -->|claim: active to sending| DB[(price_alerts)]
+    Worker -->|email with the new price| Mail[Mailpit / SMTP]
+    Worker -->|delete row, ack| DB
+    Worker -->|ack in-flight| Redis
+    API[REST API] -->|create / cancel| DB
+    API -->|add / remove| Redis
+    Reconcile[alerts:reconcile, every minute] -.->|rebuild, requeue| Redis
+```
 
 ## Quick start (Docker)
 
@@ -17,9 +34,7 @@ make test        # run the test suite inside the container
 make down        # stop the stack (data volumes are kept)
 ```
 
-The stack is seven containers: the API, one price watcher, one queue worker (`docker compose up -d --scale worker=4` for more), the scheduler, Redis, MySQL and Mailpit, plus a one-shot migrate-and-seed service the others wait for. The seed creates the demo user and two alerts far from the current price.
-
-Without `make`, the equivalent is:
+Without `make`:
 
 ```bash
 cp .env.example .env
@@ -30,9 +45,26 @@ docker compose up -d
 
 The API listens on http://localhost:8000 (`/up` is the health check) and Mailpit's inbox is at http://localhost:8025.
 
+The stack is seven containers: the API, one price watcher, one queue worker (`docker compose up -d --scale worker=4` for more), the scheduler, Redis, MySQL and Mailpit, plus a one-shot migrate-and-seed service the others wait for. The seed creates the demo user and two alerts far from the current price, so only the alert you create fires.
+
+### Walkthrough
+
+```bash
+TOKEN=$(make -s token)
+AUTH=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -H 'Content-Type: application/json')
+
+curl -s localhost:8000/api/price "${AUTH[@]}"                                   # current price, around 2650
+curl -s -X POST localhost:8000/api/alerts "${AUTH[@]}" -d '{"target_price":"2700"}'   # 201, direction "above" inferred
+make push PRICES="2690 2701.25"                                                 # walk the price across the alert
+make watch                                                                      # "... price=2701.2500 ... matched=1"
+open http://localhost:8025                                                      # "Gold price alert: 2,700.00 USD/oz reached"
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/3 "${AUTH[@]}"   # 404: delivered alerts are deleted
+make push PRICES="2702"                                                         # nothing fires again
+```
+
 ### Mirrors
 
-Images and packages are pulled from ArvanCloud's mirrors by default (`docker.arvancloud.ir` for Docker Hub images, `mirror.arvancloud.ir/alpine` for Alpine packages) so the stack builds quickly from inside Iran. Outside Iran, or if the mirrors are unreachable, set these in `.env` before `make up`:
+Images and packages are pulled from ArvanCloud's mirrors by default (`docker.arvancloud.ir` for Docker Hub images, `mirror.arvancloud.ir/alpine` for Alpine packages), so the stack builds quickly from inside Iran. PHP 8.4 and every extension are installed as binary Alpine packages, so the build never compiles anything. Outside Iran, or if the mirrors are unreachable, set these in `.env` before `make up`:
 
 ```dotenv
 DOCKER_REGISTRY=docker.io
@@ -41,43 +73,150 @@ APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 
 Composer has no ArvanCloud mirror; `COMPOSER_MIRROR` accepts any Packagist-compatible repository URL if you need one.
 
-## Running the tests on the host
+### Bare metal
 
-The test suite uses an in-memory SQLite database and needs no services:
+PHP 8.4 with the `redis`, `pcntl`, `bcmath`, `intl` and `pdo_sqlite` extensions, Composer, and a Redis (`docker compose up -d redis mailpit` is enough). In `.env`:
 
-```bash
-composer install
-php artisan test
+```dotenv
+DB_CONNECTION=sqlite
+DB_DATABASE=/absolute/path/to/database/database.sqlite
+REDIS_HOST=127.0.0.1
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+MAIL_MAILER=log          # or smtp with MAIL_HOST=127.0.0.1 MAIL_PORT=1025 for Mailpit
 ```
 
-## Price feed
+Then, in separate terminals:
 
-The global gold price comes from a `PriceProvider` selected by `GOLD_PRICE_PROVIDER`:
+```bash
+composer install && php artisan key:generate && php artisan migrate --seed
+php artisan serve
+php artisan queue:work redis --queue=alerts,default --sleep=0.1 --tries=3 --timeout=60
+php artisan price:watch -v
+php artisan schedule:work
+```
 
-- `fake` (default): a seeded random walk starting at `GOLD_FAKE_START` that moves at most `GOLD_FAKE_MAX_STEP` per tick. It can be steered to exact values for demos.
-- `goldapi`: XAU/USD from goldapi.io using `GOLD_API_URL` and `GOLD_API_TOKEN`.
+With `MAIL_MAILER=log` the email lands in `storage/logs/laravel.log`.
 
-Every provider returns a quote (price, observation time, source) or throws `PriceUnavailable`, so callers can back off without inspecting provider-specific errors. Prices are handled with four decimal places as exact integers.
+## How a tick becomes an email
 
-## Alert index
+1. **Watcher.** `price:watch` asks the `PriceProvider` for a quote every `GOLD_POLL_INTERVAL_MS` (default 1000, minimum 100). It is a long-running loop, not a scheduled task: the framework stays booted between ticks and the interval can be sub-second.
+2. **Match.** Active alerts are mirrored into two Redis sorted sets, `alerts:above` and `alerts:below`, scored by target price with the alert id as member. One Lua script per tick records the current price, takes every "above" alert at or under the price and every "below" alert at or over it, removes them from their sets and parks them in `alerts:inflight`. The script is atomic, so several watchers can run at once without popping the same alert twice, and the lookup costs O(log N + hits) however many alerts exist.
+3. **Dispatch.** The popped ids become `DeliverPriceAlert` jobs pushed to the `alerts` queue in one pipelined round trip per thousand. The watcher never waits on an email.
+4. **Claim.** A worker blocked in `BLPOP` picks the job up within milliseconds. The job claims the row with one conditional update, `active` to `sending`, which is atomic on MySQL, Postgres and SQLite. Two jobs for the same alert cannot both win, whatever produced the second one.
+5. **Send, delete, ack.** The user is emailed the new price, the row is deleted (the brief asks for deletion), and the in-flight entry is acknowledged.
+6. **Reconcile.** `alerts:reconcile` runs every minute and repairs whatever drifted: an unbuilt or lagging index, a popped alert whose job was lost, a delivery stuck in `sending`.
 
-Active alerts are mirrored into two Redis sorted sets, `alerts:above` and `alerts:below`, scored by target price in minor units with the alert id as member. A price tick is a single Lua script that takes every "above" alert at or under the price and every "below" alert at or over it, removes them from their sets and parks them in `alerts:inflight` until the delivery acknowledges them. Because the script is atomic, several tickers can run at once without popping the same alert twice, and the lookup costs O(log N + hits) however many alerts exist.
+### Direction rules
 
-The index is a projection, not the record of truth: `alerts:ready` says whether it has been built from the database since Redis last started, and it can be rebuilt at any time without touching in-flight entries. The same contract has an in-memory implementation that the test suite uses, so the suite runs without Redis; tests marked `redis` exercise the real scripts when a Redis is reachable and are mandatory in CI.
+"Reaches or crosses" is an inclusive level test on the latest tick: an `above` alert fires when `price >= target`, a `below` alert when `price <= target`. A price that gaps over several targets in one tick fires all of them.
 
-## Delivery
+- Without `direction`, the target is compared with the current price: above it watches for a rise, under it for a fall. A target equal to the current price is refused as ambiguous.
+- With `direction`, the alert is accepted as long as the current price does not already satisfy it. This is also the only way to create an alert while no fresh price is known.
+- Every tick is matched, even when the price has not moved, so an alert re-indexed at exactly the current level still fires on the next tick.
 
-Each popped alert becomes one `DeliverPriceAlert` job on the `alerts` queue. The job claims the row with a single conditional update (`active` to `sending`), which is atomic on every supported database, so two jobs for the same alert cannot both send. It then emails the user with the new price, deletes the row, and acknowledges the in-flight entry in the index.
+### The pop script
 
-A message the mail server refuses puts the alert back to `active` and lets the queue retry with backoff; after the last attempt the row is marked `failed` so the user can see it. A claim that never completes (the worker died mid-send) becomes claimable again after `GOLD_DELIVERY_STALE_AFTER_SECONDS`, which favours a rare duplicate over a silent miss.
+```lua
+-- KEYS: 1 above, 2 below, 3 inflight, 4 ready, 5 current
+-- ARGV: 1 price_minor, 2 now_ms, 3 limit, 4 source, 5 observed_at_ms
+if redis.call('EXISTS', KEYS[4]) == 0 then return false end
+redis.call('HSET', KEYS[5], 'price', ARGV[1], 'observed_at', ARGV[5], 'received_at', ARGV[2], 'source', ARGV[4])
+local limit = tonumber(ARGV[3])
+local above = redis.call('ZRANGE', KEYS[1], '-inf', ARGV[1], 'BYSCORE', 'LIMIT', 0, limit)
+local below = {}
+if #above < limit then
+    below = redis.call('ZRANGE', KEYS[2], ARGV[1], '+inf', 'BYSCORE', 'LIMIT', 0, limit - #above)
+end
+if #above > 0 then redis.call('ZREM', KEYS[1], unpack(above)) end
+if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
+-- ... every hit is added to the in-flight set with the tick time as score, then returned
+```
 
-## Watcher
+`false` means the index has not been built since Redis last started; the matcher rebuilds it from the database and pops again.
 
-`php artisan price:watch` is the long-running process that polls the feed every `GOLD_POLL_INTERVAL_MS` (default 1000, minimum 100) and matches each quote against the index. Every tick is one atomic pop per batch, followed by one pipelined push of the delivery jobs, so the watcher never waits on an email. A failing feed or index makes it back off exponentially (up to 10 s) rather than exit; `SIGTERM` stops it cleanly. `--once` runs a single tick (useful for cron, health checks and tests) and `-v` prints one line per tick.
+## Guarantees
 
-The interval is bounded by the provider: the fake feed is comfortable at a few hundred milliseconds, while real HTTP APIs usually allow far fewer calls. A streaming provider would be the upgrade path for sub-second latency.
+| Situation | What happens |
+|---|---|
+| Two watchers tick at once | The pop script is atomic; each alert is popped by exactly one of them. |
+| The same alert is dispatched twice (retry, reconcile, second watcher) | Only one job wins the `active` to `sending` claim; the other does nothing and leaves the acknowledgement to the winner. |
+| Worker dies before the mail server accepted the message | The row stays `sending`; after `GOLD_DELIVERY_STALE_AFTER_SECONDS` (120) reconcile dispatches it again and the claim re-admits it. Exactly once. |
+| Worker dies after the mail server accepted the message but before the row was deleted | Same re-drive: the user may receive the email twice. A rare duplicate beats a silent miss for a price alert, and this is the only path to a duplicate. |
+| The mail server refuses the message | The claim is released back to `active`, the job is retried with backoff (5 s, 30 s, 120 s), then marked `failed` for the user to see. |
+| Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
+| Redis restarts or is flushed | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. |
+| Redis is down when an alert is created | The row is committed and the API answers 201; the index write is retried, then reported. Reconcile sees more active rows than index members within a minute and rebuilds. |
+| The user cancels while the alert is being delivered | The conditional delete refuses with 409 until the delivery finishes (and deletes the row itself). |
+| The price gaps over several targets in one tick | All of them fire, each once. |
+| The price bounces around a target | It fires on the first crossing; the alert is gone afterwards. |
+| The feed is down or returns garbage | `PriceUnavailable` makes the watcher back off exponentially (up to 10 s). Zero, negative and non-numeric values are rejected at the provider. A plausibility band (maximum move per tick) would be the next guard. |
+| A stale index entry survives a rebuild race | The job checks the real row: a price that does not hit it puts it back into the index without sending. |
 
-`php artisan price:fake-push 2690 2701.25` steers the fake feed to exact values on its next ticks, which is how the demo walks a price across an alert.
+## Latency
+
+Time from tick to email, after the feed has answered:
+
+| Step | Cost |
+|---|---|
+| Pop (one Lua call) | sub-millisecond at any realistic index size |
+| Push jobs | one pipelined round trip per 1000 alerts |
+| Worker wake-up | `BLPOP`, about a millisecond |
+| Claim | one indexed single-row update |
+| Render and hand to SMTP | tens of milliseconds; the demo delivery takes 100 to 200 ms on a laptop, most of it in the mailer |
+
+The poll interval dominates everything else, and it is bounded by the provider: the fake feed is happy at a few hundred milliseconds, real HTTP APIs usually allow far fewer calls (goldapi.io's free tier is a few hundred per day). A streaming provider (WebSocket) is the upgrade path to sub-second alerts; nothing after the tick would change.
+
+Under a spike where one tick hits M alerts, the watcher finishes in M/1000 round trips and the mail backlog drains at roughly M x (time per email) / workers. Scale workers, not watchers. A million indexed alerts cost Redis roughly 100 MB.
+
+## Data model
+
+`price_alerts` holds only alerts that still have work to do; delivered alerts are deleted.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | FK, cascade | |
+| `direction` | `above` / `below` | |
+| `target_price` | bigint | minor units (price x 10^4), exact, doubles as the sorted-set score |
+| `reference_price` | bigint, nullable | price when the alert was created |
+| `status` | `active` / `sending` / `failed` | |
+| `triggered_price`, `triggered_at` | nullable | set when the delivery is claimed |
+| `attempts`, `last_error` | | delivery bookkeeping |
+
+Indexes: unique `(user_id, direction, target_price)`; `(user_id, created_at)` for listing; `(status, direction, target_price)` for the rebuild; `(status, updated_at)` for the stuck-delivery sweep.
+
+Prices are handled everywhere as the `Price` value object: four decimal places stored as an integer number of minor units, parsed with bcmath and rounded half-up. Sorted-set scores are therefore exact integers, never floats.
+
+Redis keys (with the configured prefix):
+
+| Key | Type | Content |
+|---|---|---|
+| `alerts:above`, `alerts:below` | sorted set | score = target in minor units, member = alert id |
+| `alerts:inflight` | sorted set | score = popped-at ms, member = `id:price` |
+| `alerts:ready` | string | exists once the index was built from the database |
+| `price:current` | hash | last quote: price, observed_at, received_at, source |
+| `price:fake:queue` | list | scripted prices for the fake feed |
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GOLD_PRICE_PROVIDER` | `fake` | `fake` (seeded random walk) or `goldapi` |
+| `GOLD_PRICE_UNIT` | `USD/oz` | label shown in emails and the API |
+| `GOLD_POLL_INTERVAL_MS` | `1000` | watcher interval, minimum 100 |
+| `GOLD_PRICE_MAX_AGE_MS` | `10000` | a recorded price older than this counts as unknown |
+| `GOLD_FAKE_START`, `GOLD_FAKE_MAX_STEP`, `GOLD_FAKE_SEED` | `2650.00`, `2.00`, empty | fake feed parameters |
+| `GOLD_API_URL`, `GOLD_API_TOKEN`, `GOLD_API_TIMEOUT` | goldapi.io XAU/USD, empty, `2.0` | real feed |
+| `GOLD_INDEX_POP_BATCH` | `1000` | alerts popped per Lua call (keep at or under 1000) |
+| `GOLD_INDEX_DISPATCH_BATCH` | `1000` | jobs per pipelined push |
+| `GOLD_INDEX_INFLIGHT_TTL_SECONDS` | `600` | popped alerts older than this with an idle queue are dispatched again |
+| `GOLD_DELIVERY_STALE_AFTER_SECONDS` | `120` | a `sending` claim older than this can be taken over |
+| `GOLD_MAX_ALERTS_PER_USER` | `100` | stored alerts per user |
+| `GOLD_API_RATE_PER_MINUTE` | `60` | API requests per user per minute |
+| `REDIS_QUEUE_BLOCK_FOR` | `5` | seconds a worker blocks on `BLPOP` |
+| `REDIS_QUEUE_RETRY_AFTER` | `90` | must exceed the job timeout (60) |
+
+The Redis index requires the phpredis client (`REDIS_CLIENT=phpredis`, the default).
 
 ## API
 
@@ -95,34 +234,46 @@ All endpoints live under `/api`, speak JSON, and are rate limited (`GOLD_API_RAT
 | `GET /api/alerts/{id}` | token, owner | | 200 the alert |
 | `DELETE /api/alerts/{id}` | token, owner | | 204, or 409 while the alert is being delivered |
 
-Validation failures return 422 with an `errors` object; missing or revoked tokens return 401; another user's alert returns 403; exceeding a limit returns 429.
+Validation failures and rule violations (equal to the current price, would trigger immediately, duplicate, limit) return 422 with an `errors` object; missing or revoked tokens return 401; another user's alert returns 403; exceeding a limit returns 429. A user may hold one alert per level and side; a previous alert at the same level that ended in `failed` is replaced automatically.
 
-Direction rules for `POST /api/alerts`:
+## Operations
 
-- Without `direction`, the target is compared with the current price: above it watches for a rise, under it for a fall. A target equal to the current price is refused as ambiguous.
-- With `direction`, the alert is accepted as long as the current price does not already satisfy it. This is also the only way to create an alert while no fresh price is known (`GET /api/price` reports `stale: true` or 503).
-- A user may hold `GOLD_MAX_ALERTS_PER_USER` alerts and one alert per level and side; a previous alert at the same level that ended in `failed` is replaced automatically.
+- **Processes.** One watcher, as many workers as the mail volume needs, one scheduler. All three are ordinary Artisan commands; the Compose file runs them as services and restarts them, and under Supervisor or systemd the same commands apply (`price:watch -v`, `queue:work redis --queue=alerts,default --sleep=0.1 --tries=3 --timeout=60 --max-time=3600`, `schedule:work` or a cron entry for `schedule:run`).
+- **Redis** runs with append-only persistence in Compose. Losing it entirely is safe: the next tick rebuilds the index.
+- **`php artisan alerts:reconcile [--rebuild]`** can be run by hand at any time; `--rebuild` forces a full reindex.
+- **`php artisan price:fake-push 2690 2701.25`** steers the fake feed.
+- **Failed deliveries** show up as `status: failed` in the API with `last_error`; `php artisan queue:failed` lists the underlying jobs.
+- **Logs** carry alert ids and prices, never email addresses.
+- **Production notes.** The image installs dev dependencies so the suite can run inside it; build with `composer install --no-dev` for production. `artisan serve` is a development server; put nginx and php-fpm, or Octane, in front of the API for real traffic. Nothing in the pipeline depends on the web server.
 
-### Walkthrough
+## Testing
 
 ```bash
-TOKEN=$(curl -s -X POST localhost:8000/api/auth/token -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"password","device_name":"cli"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
-AUTH=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -H 'Content-Type: application/json')
-
-curl -s localhost:8000/api/price "${AUTH[@]}"
-curl -s -X POST localhost:8000/api/alerts "${AUTH[@]}" -d '{"target_price":"2700"}'
-docker compose exec app php artisan price:fake-push 2690 2701.25   # walk the price across the alert
-open http://localhost:8025                                          # the email, with the new price
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/1 "${AUTH[@]}"   # 404: delivered alerts are deleted
+composer install
+php artisan test          # SQLite in memory, no services needed
+composer check            # Pint, Larastan (level 6), tests
 ```
 
-## Reconciliation
+Tests marked `redis` exercise the real Lua scripts against a dedicated Redis database and are skipped when no Redis is reachable; `docker compose up -d redis` and `REDIS_HOST=127.0.0.1 REDIS_REQUIRED=1 composer check` makes them mandatory, which is what CI does.
 
-`php artisan alerts:reconcile` runs every minute from the scheduler and is the safety net for everything that can drift:
+What is covered: the value objects and direction rules; both index implementations through one shared contract (including the atomic pop, batching, in-flight tracking and rebuild); the providers with faked HTTP; the delivery job's every path (send once, missing row, failed row, stale entry, lost claim, abandoned claim, refused message, final failure); the matcher (gaps, bounces, sides, batching, rebuild); the watcher (single tick, failure, backoff); reconcile (each repair, and the idle-queue rule); the API (rules, ownership, throttling); and the end-to-end flow through the real HTTP layer and watcher command, against both indexes.
 
-- **Index not ready or behind the database** (Redis restarted, or an index write failed after a commit): the index is rebuilt from the active rows. `--rebuild` forces this.
-- **Popped but never delivered** (a watcher died between popping and dispatching, or a job was lost): in-flight entries older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` are dispatched again, but only while the alerts queue is idle, so a backlog is never doubled.
-- **Stuck in `sending`** (a worker died mid-send): rows older than `GOLD_DELIVERY_STALE_AFTER_SECONDS` are dispatched again; the delivery job's claim re-admits them.
+PHPUnit cannot race two workers, so concurrency is proven differently: the atomic-pop test shows a second pop returns nothing, and the delivery tests show the conditional claim admits exactly one of two attempts.
 
-Every action is idempotent because the delivery job's conditional claim decides who sends. A duplicate dispatch loses the claim and does nothing.
+## Design decisions
+
+**Why a Redis sorted set instead of an indexed query?** A `(status, direction, target_price)` index also finds the hits in O(log N + hits). The sorted set buys two things: an atomic pop, so concurrent tickers and retries can never double-fire without `SELECT ... FOR UPDATE SKIP LOCKED`, and no database round trip per tick, which matters when the tick is sub-second. Below roughly a hundred thousand alerts a database query per tick would be perfectly fine; the index is what keeps the tick cheap at scale.
+
+**Why both an in-flight set and a `sending` status?** They cover different failures. The in-flight set catches alerts that were popped but never claimed (a watcher died between pop and push, a job was lost). The `sending` status catches alerts that were claimed but never finished (a worker died mid-send). Without the in-flight set, the drift check would wrongly rebuild on every tick that has jobs in flight.
+
+**Two workers get the same alert.** Both load the row as `active`. Both run `UPDATE ... SET status='sending' WHERE id=? AND status='active'`. The database serialises the two updates; one affects a row, the other affects none. The winner sends and deletes; the loser returns without acknowledging, because the winner will.
+
+**Per-alert jobs rather than chunks.** Each delivery retries and fails independently and spreads across workers; the cost is one job per alert, pushed a thousand at a time in one round trip. Chunked jobs would be the next knob for very large spikes.
+
+**Send, then delete.** The brief asks for the alert to be deleted after the user is notified, and the row is the only record. A `price_alert_deliveries` history table is the obvious extension if an audit trail is needed; it was left out to keep the schema to what the brief requires.
+
+**Why is a target equal to the current price refused?** "Reaches" is already true, and neither side can be inferred. With an explicit direction the request is still refused when the price already satisfies it, so a client cannot create an alert that fires on the next tick by accident.
+
+**Single instrument.** The keys and the table assume one price series (XAU/USD). Multiple instruments would add an `instrument` column and a key prefix per instrument; nothing else changes.
+
+**Polling.** The brief assumes an external API, so the watcher polls. The provider contract does not care where quotes come from; a streaming provider would call the same matcher per message.
