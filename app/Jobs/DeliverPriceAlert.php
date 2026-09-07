@@ -33,7 +33,7 @@ use Throwable;
  */
 #[Queue(DeliverPriceAlert::QUEUE)]
 #[Tries(3)]
-#[Backoff(5, 30, 120)]
+#[Backoff(5, 30)]
 #[Timeout(60)]
 final class DeliverPriceAlert implements ShouldQueue
 {
