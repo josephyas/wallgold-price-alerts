@@ -87,6 +87,13 @@ class CreatePriceAlert
         }
 
         $existing->delete();
-        $this->index->remove($existing->id);
+
+        // A lingering member is harmless (the delivery job finds no row and
+        // acknowledges it), so an index outage must not fail the request.
+        try {
+            $this->index->remove($existing->id);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 }

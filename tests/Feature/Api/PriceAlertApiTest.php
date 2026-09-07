@@ -245,7 +245,10 @@ final class PriceAlertApiTest extends TestCase
         $this->mock(AlertIndex::class, function (MockInterface $mock): void {
             $mock->shouldReceive('currentPrice')->andThrow(new RedisException('Connection refused'));
             $mock->shouldReceive('add')->andThrow(new RedisException('Connection refused'));
+            $mock->shouldReceive('remove')->andThrow(new RedisException('Connection refused'));
         });
+        // A failed alert at the same level is replaced on the way, index outage or not.
+        PriceAlert::factory()->for($this->user)->failed()->above('2700')->create();
 
         $this->postJson('/api/alerts', ['target_price' => '2700'])
             ->assertUnprocessable()
@@ -257,6 +260,7 @@ final class PriceAlertApiTest extends TestCase
             ->json('data.id');
 
         $this->assertDatabaseHas('price_alerts', ['id' => $id, 'status' => 'active']);
+        $this->assertDatabaseCount('price_alerts', 1);
         Exceptions::assertReported(RedisException::class);
 
         // The reconcile pass repairs the missing index entry from the database.
