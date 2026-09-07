@@ -259,6 +259,10 @@ the system work without a terminal:
 - **Reset** that deletes every alert, empties the queue, the failed jobs, the index and the inbox, and drops queued
   scripted prices, behind a confirmation. The live market price is left alone.
 
+It follows Wallgold's own visual system, taken from wallgold.ir: white cards on a near-white page, `#171D26` as the
+action colour with pill controls, brand gold `#B99C49` as an accent (its darker `#7D6831` wherever gold is read at text
+size), 16px cards, set in Vazirmatn, the open counterpart to their IRANSans. Every foreground pair meets 4.5:1.
+
 The console exposes unauthenticated write endpoints, so a middleware refuses every one of its routes in production
 regardless of configuration; `GOLD_DEV_CONSOLE=false` switches it off anywhere else. It acts as the seeded demo
 account, and reads Mailpit at `GOLD_MAILPIT_URL`.
