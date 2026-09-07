@@ -28,7 +28,8 @@ return [
     'fake' => [
         'start' => env('GOLD_FAKE_START', '2650.00'),
         'max_step' => env('GOLD_FAKE_MAX_STEP', '2.00'),
-        'seed' => env('GOLD_FAKE_SEED'),
+        // An integer makes the walk repeatable; empty or absent means a fresh walk each start.
+        'seed' => is_numeric($seed = env('GOLD_FAKE_SEED')) ? (int) $seed : null,
     ],
 
     /*

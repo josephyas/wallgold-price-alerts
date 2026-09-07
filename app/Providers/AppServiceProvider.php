@@ -50,7 +50,7 @@ class AppServiceProvider extends ServiceProvider
                 'fake' => new FakePriceProvider(
                     start: Price::fromDecimal((string) $config->get('gold.fake.start')),
                     maxStep: Price::fromDecimal((string) $config->get('gold.fake.max_step')),
-                    seed: $config->get('gold.fake.seed') === null ? null : (int) $config->get('gold.fake.seed'),
+                    seed: is_numeric($seed = $config->get('gold.fake.seed')) ? (int) $seed : null,
                     script: $app->make(ScriptedPrices::class),
                 ),
                 'goldapi' => new GoldApiPriceProvider(
