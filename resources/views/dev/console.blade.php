@@ -247,6 +247,10 @@
   /* Side-by-side fields are siblings, so the stacking margin above would
      otherwise drop the right-hand control by 12px. */
   .two > .fld { margin-top: 0; }
+  /* A .two wrapper breaks the .fld + .fld chain, so the control after a
+     side-by-side pair would otherwise sit flush against it. */
+  .two + .fld, .fld + .two, .two + .two,
+  form + .two, form + .fld, .two + form, .fld + form { margin-top: 12px; }
   /* Labels wrap to two lines at some widths; keep both controls on one line. */
   .two > .fld > label { min-height: 1.2em; }
 
@@ -642,7 +646,7 @@
           </div>
         </form>
 
-        <div class="two" style="margin-top:14px">
+        <div class="two">
           <div class="fld">
             <label class="lbl" for="auto-int">Auto every</label>
             <select id="auto-int">
