@@ -36,6 +36,11 @@ class PriceAlert extends Model
     /** @use HasFactory<PriceAlertFactory> */
     use HasFactory;
 
+    protected $attributes = [
+        'status' => 'active',
+        'attempts' => 0,
+    ];
+
     protected $fillable = [
         'user_id',
         'direction',

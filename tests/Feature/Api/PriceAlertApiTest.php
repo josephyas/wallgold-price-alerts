@@ -47,6 +47,7 @@ final class PriceAlertApiTest extends TestCase
             ->assertJsonPath('data.direction', 'above')
             ->assertJsonPath('data.status', 'active')
             ->assertJsonPath('data.reference_price', '2650.0000')
+            ->assertJsonPath('data.attempts', 0)
             ->assertJsonMissingPath('data.last_error');
 
         $id = $response->json('data.id');
