@@ -33,5 +33,8 @@
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
         <env name="GOLD_PRICE_PROVIDER" value="fake" force="true"/>
+        <env name="REDIS_DB" value="15" force="true"/>
+        <env name="REDIS_CACHE_DB" value="15" force="true"/>
+        <env name="REDIS_PREFIX" value="wallgold_test_" force="true"/>
     </php>
 </phpunit>

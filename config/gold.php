@@ -31,6 +31,18 @@ return [
         'seed' => env('GOLD_FAKE_SEED'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Alert index
+    |--------------------------------------------------------------------------
+    |
+    | Active alerts are indexed in Redis sorted sets on this connection so a
+    | price tick finds everything it triggers in one atomic call.
+    |
+    */
+
+    'redis_connection' => env('GOLD_REDIS_CONNECTION', 'default'),
+
     'goldapi' => [
         'url' => env('GOLD_API_URL', 'https://www.goldapi.io/api/XAU/USD'),
         'token' => env('GOLD_API_TOKEN', ''),

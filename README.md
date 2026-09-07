@@ -54,3 +54,9 @@ The global gold price comes from a `PriceProvider` selected by `GOLD_PRICE_PROVI
 - `goldapi`: XAU/USD from goldapi.io using `GOLD_API_URL` and `GOLD_API_TOKEN`.
 
 Every provider returns a quote (price, observation time, source) or throws `PriceUnavailable`, so callers can back off without inspecting provider-specific errors. Prices are handled with four decimal places as exact integers.
+
+## Alert index
+
+Active alerts are mirrored into two Redis sorted sets, `alerts:above` and `alerts:below`, scored by target price in minor units with the alert id as member. A price tick is a single Lua script that takes every "above" alert at or under the price and every "below" alert at or over it, removes them from their sets and parks them in `alerts:inflight` until the delivery acknowledges them. Because the script is atomic, several tickers can run at once without popping the same alert twice, and the lookup costs O(log N + hits) however many alerts exist.
+
+The index is a projection, not the record of truth: `alerts:ready` says whether it has been built from the database since Redis last started, and it can be rebuilt at any time without touching in-flight entries. The same contract has an in-memory implementation that the test suite uses, so the suite runs without Redis; tests marked `redis` exercise the real scripts when a Redis is reachable and are mandatory in CI.

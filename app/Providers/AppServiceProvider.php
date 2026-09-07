@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Alerts\Contracts\AlertIndex;
+use App\Alerts\Index\RedisAlertIndex;
 use App\Pricing\Contracts\PriceProvider;
 use App\Pricing\Contracts\ScriptedPrices;
 use App\Pricing\Price;
@@ -12,6 +14,7 @@ use App\Pricing\Providers\GoldApiPriceProvider;
 use App\Pricing\Providers\InMemoryScriptedPrices;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +24,13 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->singleton(AlertIndex::class, function (Application $app): AlertIndex {
+            /** @var Config $config */
+            $config = $app->make(Config::class);
+
+            return new RedisAlertIndex($app->make(RedisFactory::class), (string) $config->get('gold.redis_connection'));
+        });
+
         $this->app->singleton(ScriptedPrices::class, InMemoryScriptedPrices::class);
 
         $this->app->singleton(PriceProvider::class, function (Application $app): PriceProvider {
