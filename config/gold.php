@@ -71,6 +71,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Development console
+    |--------------------------------------------------------------------------
+    |
+    | A browser console at /dev for driving the pipeline by hand: push prices,
+    | create alerts, watch the index and the inbox. It exposes unauthenticated
+    | write endpoints, so it is refused in production regardless of this flag.
+    |
+    */
+
+    'dev_console' => (bool) env('GOLD_DEV_CONSOLE', true),
+
+    'dev_console_email' => env('GOLD_DEV_CONSOLE_EMAIL', 'demo@example.com'),
+
+    'mailpit_url' => env('GOLD_MAILPIT_URL', 'http://mailpit:8025'),
+
+    /*
+    |--------------------------------------------------------------------------
     | API limits
     |--------------------------------------------------------------------------
     */

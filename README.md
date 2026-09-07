@@ -241,6 +241,24 @@ All endpoints live under `/api`, speak JSON, and are rate limited (`GOLD_API_RAT
 
 Validation failures and rule violations (equal to the current price, would trigger immediately, duplicate, limit) return 422 with an `errors` object; missing or revoked tokens return 401; another user's alert returns 403; exceeding a limit returns 429. A user may hold one alert per level and side; a previous alert at the same level that ended in `failed` is replaced automatically.
 
+## Development console
+
+`http://localhost:8000/dev` is a browser console for driving and watching the pipeline. It is the fastest way to see
+the system work without a terminal:
+
+- **Live price** with a chart of recent ticks and a dashed line for every active alert target, so you can watch the
+  price approach one.
+- **Alerts** with their status, target, triggered price and attempts, and a cancel button per row.
+- **Pipeline counters**: index sizes above and below, in-flight deliveries, queue depth and failed jobs.
+- **Delivered mail** read from Mailpit, with a clear button.
+- **Controls** to push exact prices, run an auto-push that drifts the feed up, down or at random, and create alerts.
+- **End-to-end test** that creates an alert above the current price, walks the feed across it, waits for the email,
+  then checks the alert deleted itself and does not fire twice, reporting each step with its own timing.
+
+The console exposes unauthenticated write endpoints, so a middleware refuses every one of its routes in production
+regardless of configuration; `GOLD_DEV_CONSOLE=false` switches it off anywhere else. It acts as the seeded demo
+account, and reads Mailpit at `GOLD_MAILPIT_URL`.
+
 ## Postman
 
 `postman/` holds a collection and a local environment covering every endpoint:

@@ -12,6 +12,7 @@ use App\Pricing\Price;
 use App\Pricing\Providers\FakePriceProvider;
 use App\Pricing\Providers\GoldApiPriceProvider;
 use App\Pricing\Providers\RedisScriptedPrices;
+use App\Support\MailpitInbox;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
@@ -39,6 +40,13 @@ class AppServiceProvider extends ServiceProvider
             $config = $app->make(Config::class);
 
             return new RedisScriptedPrices($app->make(RedisFactory::class), (string) $config->get('gold.redis_connection'));
+        });
+
+        $this->app->singleton(MailpitInbox::class, function (Application $app): MailpitInbox {
+            /** @var Config $config */
+            $config = $app->make(Config::class);
+
+            return new MailpitInbox($app->make(Http::class), rtrim((string) $config->get('gold.mailpit_url'), '/'));
         });
 
         $this->app->singleton(PriceProvider::class, function (Application $app): PriceProvider {
