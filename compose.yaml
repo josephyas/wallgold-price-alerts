@@ -1,0 +1,92 @@
+x-app: &app
+  build:
+    context: .
+    args:
+      REGISTRY: ${DOCKER_REGISTRY:-docker.arvancloud.ir}
+      APK_MIRROR: ${APK_MIRROR:-https://mirror.arvancloud.ir/alpine}
+      COMPOSER_MIRROR: ${COMPOSER_MIRROR:-}
+  image: wallgold-price-alerts:local
+  # The application reads .env as a file (not as injected variables), so the
+  # test suite's own settings in phpunit.xml still take precedence inside the
+  # container. Only service hostnames are pinned here.
+  volumes:
+    - ./.env:/app/.env:ro
+  environment:
+    DB_HOST: mysql
+    DB_PORT: "3306"
+    REDIS_HOST: redis
+    MAIL_HOST: mailpit
+    MAIL_PORT: "1025"
+  restart: unless-stopped
+
+x-depends: &depends
+  migrate:
+    condition: service_completed_successfully
+  mysql:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+  migrate:
+    <<: *app
+    command: ["php", "artisan", "migrate", "--force", "--seed"]
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  app:
+    <<: *app
+    depends_on: *depends
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/up"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/library/redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  mysql:
+    image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/library/mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-wallgold}
+      MYSQL_USER: ${DB_USERNAME:-wallgold}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  mailpit:
+    image: ${DOCKER_REGISTRY:-docker.arvancloud.ir}/axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  mysql-data:

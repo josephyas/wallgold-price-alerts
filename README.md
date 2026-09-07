@@ -4,6 +4,44 @@ Gold price alert service built on Laravel 13. A user registers a target gold pri
 
 The service is API-only: there is no frontend, the root route returns service metadata and `/up` is the health check.
 
-## Running
+## Quick start (Docker)
 
-Setup instructions follow as the application takes shape.
+Requirements: Docker with Compose v2. Everything else runs in containers.
+
+```bash
+make up          # builds the image, writes .env with an application key, starts the stack
+make logs        # follow all services
+make test        # run the test suite inside the container
+make down        # stop the stack (data volumes are kept)
+```
+
+Without `make`, the equivalent is:
+
+```bash
+cp .env.example .env
+docker compose build app
+docker compose run --rm --no-deps app php artisan key:generate --show   # paste into APP_KEY in .env
+docker compose up -d
+```
+
+The API listens on http://localhost:8000 (`/up` is the health check) and Mailpit's inbox is at http://localhost:8025.
+
+### Mirrors
+
+Images and packages are pulled from ArvanCloud's mirrors by default (`docker.arvancloud.ir` for Docker Hub images, `mirror.arvancloud.ir/alpine` for Alpine packages) so the stack builds quickly from inside Iran. Outside Iran, or if the mirrors are unreachable, set these in `.env` before `make up`:
+
+```dotenv
+DOCKER_REGISTRY=docker.io
+APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+```
+
+Composer has no ArvanCloud mirror; `COMPOSER_MIRROR` accepts any Packagist-compatible repository URL if you need one.
+
+## Running the tests on the host
+
+The test suite uses an in-memory SQLite database and needs no services:
+
+```bash
+composer install
+php artisan test
+```

@@ -3,23 +3,20 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * Seed the demo data. Safe to run repeatedly: every record is looked up
+     * before it is created, so restarting the stack never fails on duplicates.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        User::query()->firstOrCreate(
+            ['email' => 'demo@example.com'],
+            ['name' => 'Demo User', 'password' => Hash::make('password')],
+        );
     }
 }
