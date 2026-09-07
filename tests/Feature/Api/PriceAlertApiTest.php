@@ -7,6 +7,7 @@ namespace Tests\Feature\Api;
 use App\Alerts\Contracts\AlertIndex;
 use App\Alerts\Direction;
 use App\Alerts\IndexRebuilder;
+use App\Jobs\DeliverPriceAlert;
 use App\Models\PriceAlert;
 use App\Models\User;
 use App\Pricing\Price;
@@ -176,7 +177,7 @@ final class PriceAlertApiTest extends TestCase
             ->assertJsonCount(2, 'data')
             ->assertJsonPath('data.0.id', $newer->id)
             ->assertJsonPath('data.1.id', $older->id)
-            ->assertJsonPath('data.0.last_error', 'Mailer refused the message.')
+            ->assertJsonPath('data.0.last_error', DeliverPriceAlert::REASON_GAVE_UP)
             ->assertJsonPath('meta.total', 2);
 
         $this->getJson('/api/alerts?status=active')

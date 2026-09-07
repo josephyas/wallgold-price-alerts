@@ -167,7 +167,7 @@ final class DeliverPriceAlertTest extends TestCase
 
         self::assertSame(AlertStatus::Active, $fresh?->status);
         self::assertSame(1, $fresh->attempts);
-        self::assertSame('SMTP refused the message', $fresh->last_error);
+        self::assertSame(DeliverPriceAlert::REASON_REFUSED, $fresh->last_error, 'the transport message stays in the log');
         self::assertSame(1, $this->index->sizes()['inflight'], 'still owed a delivery');
     }
 
@@ -188,6 +188,7 @@ final class DeliverPriceAlertTest extends TestCase
         }
 
         self::assertSame(AlertStatus::Active, $alert->fresh()?->status, 'the next attempt can claim it again');
+        self::assertSame(DeliverPriceAlert::REASON_NOT_SENT, $alert->fresh()?->last_error);
         self::assertSame(1, $this->index->sizes()['inflight']);
     }
 
@@ -219,7 +220,7 @@ final class DeliverPriceAlertTest extends TestCase
         $fresh = $alert->fresh();
 
         self::assertSame(AlertStatus::Failed, $fresh?->status);
-        self::assertSame('boom', $fresh->last_error);
+        self::assertSame(DeliverPriceAlert::REASON_GAVE_UP, $fresh->last_error, 'the exception message is logged, not shown');
         self::assertSame(0, $this->index->sizes()['inflight']);
     }
 

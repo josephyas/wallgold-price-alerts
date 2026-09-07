@@ -19,6 +19,7 @@ use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Throwable;
 
 /**
@@ -39,6 +40,13 @@ final class DeliverPriceAlert implements ShouldQueue
     use Queueable;
 
     public const string QUEUE = 'alerts';
+
+    /** Reasons shown to the user; the underlying exception goes to the log only. */
+    public const string REASON_REFUSED = 'The mail server refused the message.';
+
+    public const string REASON_NOT_SENT = 'Delivery failed before the message was sent.';
+
+    public const string REASON_GAVE_UP = 'Delivery failed after every attempt.';
 
     public function __construct(
         public readonly int $alertId,
@@ -116,7 +124,7 @@ final class DeliverPriceAlert implements ShouldQueue
             ->whereIn('status', [AlertStatus::Active, AlertStatus::Sending])
             ->update([
                 'status' => AlertStatus::Failed,
-                'last_error' => mb_substr((string) $exception?->getMessage(), 0, 1000),
+                'last_error' => self::REASON_GAVE_UP,
             ]);
 
         app(AlertIndex::class)->ack($this->alertId, $this->quote->price);
@@ -155,7 +163,9 @@ final class DeliverPriceAlert implements ShouldQueue
             ->where('status', AlertStatus::Sending)
             ->update([
                 'status' => AlertStatus::Active,
-                'last_error' => mb_substr($reason->getMessage(), 0, 1000),
+                'last_error' => $reason instanceof TransportExceptionInterface ? self::REASON_REFUSED : self::REASON_NOT_SENT,
             ]);
+
+        Log::warning('price-alert.send-failed', ['alert_id' => $alert->id, 'error' => $reason->getMessage()]);
     }
 }

@@ -6,6 +6,7 @@ namespace Database\Factories;
 
 use App\Alerts\AlertStatus;
 use App\Alerts\Direction;
+use App\Jobs\DeliverPriceAlert;
 use App\Models\PriceAlert;
 use App\Models\User;
 use App\Pricing\Price;
@@ -49,6 +50,6 @@ final class PriceAlertFactory extends Factory
 
     public function failed(): self
     {
-        return $this->state(['status' => AlertStatus::Failed, 'attempts' => 3, 'last_error' => 'Mailer refused the message.']);
+        return $this->state(['status' => AlertStatus::Failed, 'attempts' => 3, 'last_error' => DeliverPriceAlert::REASON_GAVE_UP]);
     }
 }
