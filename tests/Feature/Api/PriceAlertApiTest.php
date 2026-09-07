@@ -13,8 +13,11 @@ use App\Pricing\Price;
 use App\Pricing\PriceQuote;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Sanctum\Sanctum;
+use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\Test;
+use RedisException;
 use Tests\TestCase;
 
 final class PriceAlertApiTest extends TestCase
@@ -229,6 +232,49 @@ final class PriceAlertApiTest extends TestCase
         $this->deleteJson("/api/alerts/{$theirs->id}")->assertForbidden();
 
         $this->assertDatabaseHas('price_alerts', ['id' => $theirs->id]);
+    }
+
+    #[Test]
+    public function an_index_outage_counts_as_an_unknown_price_and_does_not_lose_the_alert(): void
+    {
+        Exceptions::fake();
+        $this->mock(AlertIndex::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('currentPrice')->andThrow(new RedisException('Connection refused'));
+            $mock->shouldReceive('add')->andThrow(new RedisException('Connection refused'));
+        });
+
+        $this->postJson('/api/alerts', ['target_price' => '2700'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['direction']);
+
+        $id = $this->postJson('/api/alerts', ['target_price' => '2700', 'direction' => 'above'])
+            ->assertCreated()
+            ->assertJsonPath('data.reference_price', null)
+            ->json('data.id');
+
+        $this->assertDatabaseHas('price_alerts', ['id' => $id, 'status' => 'active']);
+        Exceptions::assertReported(RedisException::class);
+
+        // The reconcile pass repairs the missing index entry from the database.
+        $this->app->forgetInstance(AlertIndex::class);
+        $this->app->singleton(AlertIndex::class, fn (): AlertIndex => $this->index);
+        $this->artisan('alerts:reconcile')->assertSuccessful();
+        self::assertSame([$id], $this->index->pop($this->quote('2700'), 10));
+    }
+
+    #[Test]
+    public function cancelling_succeeds_even_when_the_index_is_unreachable(): void
+    {
+        Exceptions::fake();
+        $alert = PriceAlert::factory()->for($this->user)->above('2700')->create();
+        $this->mock(AlertIndex::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('remove')->once()->andThrow(new RedisException('Connection refused'));
+        });
+
+        $this->deleteJson("/api/alerts/{$alert->id}")->assertNoContent();
+
+        $this->assertDatabaseMissing('price_alerts', ['id' => $alert->id]);
+        Exceptions::assertReported(RedisException::class);
     }
 
     private function recordPrice(string $price): void

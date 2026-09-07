@@ -8,6 +8,7 @@ use App\Alerts\Contracts\AlertIndex;
 use App\Alerts\Exceptions\AlertRejected;
 use App\Pricing\Price;
 use Illuminate\Contracts\Config\Repository as Config;
+use Throwable;
 
 /**
  * Decides which side a new alert watches.
@@ -51,10 +52,19 @@ class DirectionResolver
         return new ResolvedDirection($requested, $current);
     }
 
-    /** The last recorded price, unless the watcher has not recorded one recently. */
+    /**
+     * The last recorded price, unless the watcher has not recorded one recently
+     * or the index cannot be reached: an outage counts as "price unknown".
+     */
     public function currentPrice(): ?Price
     {
-        $current = $this->index->currentPrice();
+        try {
+            $current = $this->index->currentPrice();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
 
         if ($current === null || $current->isStale((int) $this->config->get('gold.price_max_age_ms'))) {
             return null;

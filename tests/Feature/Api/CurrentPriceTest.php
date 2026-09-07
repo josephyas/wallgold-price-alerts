@@ -10,8 +10,11 @@ use App\Pricing\Price;
 use App\Pricing\PriceQuote;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Sanctum\Sanctum;
+use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\Test;
+use RedisException;
 use Tests\TestCase;
 
 final class CurrentPriceTest extends TestCase
@@ -51,6 +54,22 @@ final class CurrentPriceTest extends TestCase
         CarbonImmutable::setTestNow('2026-09-07 12:00:11');
 
         $this->getJson('/api/price')->assertOk()->assertJsonPath('data.stale', true);
+    }
+
+    #[Test]
+    public function it_is_unavailable_while_the_index_cannot_be_reached(): void
+    {
+        Exceptions::fake();
+        Sanctum::actingAs(User::factory()->create());
+        $this->mock(AlertIndex::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('currentPrice')->once()->andThrow(new RedisException('Connection refused'));
+        });
+
+        $this->getJson('/api/price')
+            ->assertServiceUnavailable()
+            ->assertJsonPath('message', 'The gold price is currently unavailable.');
+
+        Exceptions::assertReported(RedisException::class);
     }
 
     #[Test]

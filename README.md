@@ -146,7 +146,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 | The mail server refuses the message | The claim is released back to `active`, the job is retried with backoff (5 s, 30 s, 120 s), then marked `failed` for the user to see. |
 | Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
 | Redis restarts or is flushed | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. |
-| Redis is down when an alert is created | The row is committed and the API answers 201; the index write is retried, then reported. Reconcile sees more active rows than index members within a minute and rebuilds. |
+| Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile repairs the index within a minute. `GET /api/price` answers 503 meanwhile. |
 | The user cancels while the alert is being delivered | The conditional delete refuses with 409 until the delivery finishes (and deletes the row itself). |
 | The price gaps over several targets in one tick | All of them fire, each once. |
 | The price bounces around a target | It fires on the first crossing; the alert is gone afterwards. |

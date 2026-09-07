@@ -8,6 +8,7 @@ use App\Alerts\AlertStatus;
 use App\Alerts\Contracts\AlertIndex;
 use App\Alerts\Exceptions\AlertBeingDelivered;
 use App\Models\PriceAlert;
+use Throwable;
 
 class CancelPriceAlert
 {
@@ -29,7 +30,12 @@ class CancelPriceAlert
             throw new AlertBeingDelivered;
         }
 
-        // A member that lingers here is harmless: the delivery job finds no row and acknowledges it.
-        $this->index->remove($alert->id);
+        // A member that lingers here is harmless (the delivery job finds no row
+        // and acknowledges it), so an index outage must not fail the cancel.
+        try {
+            $this->index->remove($alert->id);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 }
