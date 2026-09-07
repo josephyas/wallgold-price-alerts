@@ -206,6 +206,25 @@ abstract class AlertIndexContractTestCase extends TestCase
     }
 
     #[Test]
+    public function it_reports_which_ids_it_still_knows_about(): void
+    {
+        $this->index->rebuild([
+            new IndexEntry(1, Direction::Above, Price::fromDecimal('2700')),
+            new IndexEntry(2, Direction::Below, Price::fromDecimal('2600')),
+            new IndexEntry(3, Direction::Above, Price::fromDecimal('2650')),
+        ]);
+        $this->index->pop($this->quote('2660'), 10);
+
+        self::assertSame([1, 2, 3], $this->index->present([1, 2, 3, 4, 5]), 'levels and in-flight both count');
+        self::assertSame([], $this->index->present([4, 5]));
+        self::assertSame([], $this->index->present([]));
+
+        $this->index->ack(3, Price::fromDecimal('2660'));
+
+        self::assertSame([1, 2], $this->index->present([1, 2, 3]));
+    }
+
+    #[Test]
     public function entries_can_be_added_in_bulk(): void
     {
         $this->index->rebuild([]);

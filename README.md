@@ -105,7 +105,7 @@ With `MAIL_MAILER=log` the email lands in `storage/logs/laravel.log`.
 3. **Dispatch.** The popped ids become `DeliverPriceAlert` jobs pushed to the `alerts` queue in one pipelined round trip per thousand. The watcher never waits on an email.
 4. **Claim.** A worker blocked in `BLPOP` picks the job up within milliseconds. The job claims the row with one conditional update, `active` to `sending`, which is atomic on MySQL, Postgres and SQLite. Two jobs for the same alert cannot both win, whatever produced the second one.
 5. **Send, delete, ack.** The user is emailed the new price, the row is deleted (the brief asks for deletion), and the in-flight entry is acknowledged.
-6. **Reconcile.** `alerts:reconcile` runs every minute and repairs whatever drifted: an unbuilt or lagging index, a popped alert whose job was lost, a delivery stuck in `sending`.
+6. **Reconcile.** `alerts:reconcile` runs every minute and repairs whatever drifted: an unbuilt index, active alerts missing from it, a popped alert whose job was lost, a delivery stuck in `sending`.
 
 ### Direction rules
 
@@ -146,7 +146,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 | The mail server refuses the message | The claim is released back to `active`, the job is retried with backoff (5 s, 30 s, 120 s), then marked `failed` for the user to see. |
 | Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
 | Redis restarts or is flushed | The ready flag is gone; the next tick rebuilds the index from the active rows before matching. |
-| Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile repairs the index within a minute. `GET /api/price` answers 503 meanwhile. |
+| Redis is down when an alert is created or cancelled | The outage counts as "price unknown": creating without a direction answers 422, creating with an explicit direction commits the row and answers 201 (the index write is retried, then reported), and cancelling answers 204. Reconcile finds the row missing from the index within a minute and adds it back. `GET /api/price` answers 503 meanwhile. |
 | The user cancels while the alert is being delivered | The conditional delete refuses with 409 until the delivery finishes (and deletes the row itself). |
 | The price gaps over several targets in one tick | All of them fire, each once. |
 | The price bounces around a target | It fires on the first crossing; the alert is gone afterwards. |

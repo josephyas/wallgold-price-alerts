@@ -66,16 +66,27 @@ final class ReconcileAlertsCommandTest extends TestCase
     }
 
     #[Test]
-    public function drift_between_the_database_and_the_index_is_repaired(): void
+    public function alerts_missing_from_the_index_are_added_back_without_a_rebuild(): void
     {
-        PriceAlert::factory()->above('2700')->create();
-        PriceAlert::factory()->below('2600')->create();
-        // Only one of the two made it into the index (Redis was down when the other was created).
-        $this->index->add(1, Direction::Above, Price::fromDecimal('2700'));
+        $indexed = PriceAlert::factory()->above('2700')->create();
+        $missing = PriceAlert::factory()->below('2600')->create();
+        $inflight = PriceAlert::factory()->above('2650')->create();
+        PriceAlert::factory()->failed()->above('2680')->create();
+        // Only some made it into the index (Redis was down when the others were created).
+        $this->index->add($indexed->id, Direction::Above, Price::fromDecimal('2700'));
+        $this->index->add($inflight->id, Direction::Above, Price::fromDecimal('2650'));
+        $this->index->pop($this->quote('2660'), 10);
+        $this->spy(IndexRebuilder::class);
 
-        $this->artisan('alerts:reconcile')->expectsOutputToContain('index rebuilt (2 alerts)')->assertSuccessful();
+        $this->artisan('alerts:reconcile')
+            ->expectsOutputToContain('index repaired (1 missing alerts re-indexed)')
+            ->assertSuccessful();
 
-        self::assertSame(['above' => 1, 'below' => 1, 'inflight' => 0], $this->index->sizes());
+        $this->spy(IndexRebuilder::class)->shouldNotHaveReceived('rebuild');
+        self::assertSame(['above' => 1, 'below' => 1, 'inflight' => 1], $this->index->sizes());
+        self::assertSame([$missing->id], $this->index->pop($this->quote('2600'), 10));
+
+        $this->artisan('alerts:reconcile')->expectsOutputToContain('index consistent')->assertSuccessful();
     }
 
     #[Test]

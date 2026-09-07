@@ -30,6 +30,15 @@ interface AlertIndex
     public function remove(int $id): void;
 
     /**
+     * Which of the given alert ids the index still knows about, either in a
+     * level set or in flight. Used to repair missing entries without a rebuild.
+     *
+     * @param  list<int>  $ids
+     * @return list<int>
+     */
+    public function present(array $ids): array;
+
+    /**
      * Atomically take every alert the quote triggers, up to the limit, and
      * record the quote as the current price. Returns null while the index has
      * not been built, so the caller can rebuild it first.

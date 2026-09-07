@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Alerts\AlertStatus;
 use App\Alerts\Contracts\AlertIndex;
+use App\Alerts\Index\IndexEntry;
 use App\Alerts\Index\InflightEntry;
 use App\Alerts\IndexRebuilder;
 use App\Jobs\DeliverPriceAlert;
@@ -36,16 +37,21 @@ final class ReconcileAlerts extends Command
     public function handle(AlertIndex $index, IndexRebuilder $rebuilder, QueueFactory $queue): int
     {
         $rebuilt = $this->rebuildIfNeeded($index, $rebuilder);
+        $repaired = $rebuilt === null ? $this->reindexMissingAlerts($index) : 0;
         $requeued = $this->requeueLostDeliveries($index, $queue);
         $redriven = $this->redriveStuckDeliveries($queue);
 
-        $summary = ['rebuilt' => $rebuilt, 'requeued' => $requeued, 'redriven' => $redriven];
+        $summary = ['rebuilt' => $rebuilt, 'repaired' => $repaired, 'requeued' => $requeued, 'redriven' => $redriven];
 
         Log::info('price-alert.reconciled', $summary);
 
         $this->components->info(sprintf(
             'Reconciled: index %s, %d lost delivery(ies) requeued, %d stuck delivery(ies) re-driven.',
-            $rebuilt === null ? 'consistent' : "rebuilt ({$rebuilt} alerts)",
+            match (true) {
+                $rebuilt !== null => "rebuilt ({$rebuilt} alerts)",
+                $repaired > 0 => "repaired ({$repaired} missing alerts re-indexed)",
+                default => 'consistent',
+            },
             $requeued,
             $redriven,
         ));
@@ -54,18 +60,14 @@ final class ReconcileAlerts extends Command
     }
 
     /**
-     * Rebuild when forced, when the index was never built (Redis restarted),
-     * or when it holds fewer members than there are active alerts.
+     * A full rebuild only when forced or when the index was never built
+     * (Redis lost its data); everything else is repaired member by member.
      */
     private function rebuildIfNeeded(AlertIndex $index, IndexRebuilder $rebuilder): ?int
     {
-        $active = PriceAlert::query()->active()->count();
-        $indexed = array_sum($index->sizes());
-
         $reason = match (true) {
             (bool) $this->option('rebuild') => 'requested',
             ! $index->isReady() => 'index not ready',
-            $active > $indexed => sprintf('drift: %d active alerts, %d indexed', $active, $indexed),
             default => null,
         };
 
@@ -78,6 +80,43 @@ final class ReconcileAlerts extends Command
         Log::warning('price-alert.index.rebuild-triggered', ['reason' => $reason, 'entries' => $count]);
 
         return $count;
+    }
+
+    /**
+     * Every active row must be known to the index, in a level set or in
+     * flight. Whatever is missing (an index write that failed after a commit,
+     * an add that raced a rebuild) is added back individually.
+     */
+    private function reindexMissingAlerts(AlertIndex $index): int
+    {
+        $repaired = 0;
+
+        PriceAlert::query()
+            ->active()
+            ->select(['id', 'direction', 'target_price'])
+            ->lazyById(self::BATCH)
+            ->chunk(self::BATCH)
+            ->each(function ($alerts) use ($index, &$repaired): void {
+                /** @var \Illuminate\Support\Collection<int, PriceAlert> $alerts */
+                $present = array_flip($index->present($alerts->pluck('id')->all()));
+
+                $missing = $alerts
+                    ->reject(fn (PriceAlert $alert): bool => isset($present[$alert->id]))
+                    ->map(fn (PriceAlert $alert): IndexEntry => new IndexEntry($alert->id, $alert->direction, $alert->target_price));
+
+                if ($missing->isEmpty()) {
+                    return;
+                }
+
+                $index->addMany($missing->all());
+                $repaired += $missing->count();
+            });
+
+        if ($repaired > 0) {
+            Log::warning('price-alert.index.repaired', ['missing' => $repaired]);
+        }
+
+        return $repaired;
     }
 
     /**

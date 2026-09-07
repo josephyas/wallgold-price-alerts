@@ -112,6 +112,40 @@ final class RedisAlertIndex implements AlertIndex
         $redis->zrem(self::KEY_BELOW, (string) $id);
     }
 
+    public function present(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $redis = $this->redis();
+        $members = array_map(strval(...), $ids);
+
+        /** @var list<float|false> $above */
+        $above = $redis->command('zmscore', [self::KEY_ABOVE, ...$members]);
+        /** @var list<float|false> $below */
+        $below = $redis->command('zmscore', [self::KEY_BELOW, ...$members]);
+
+        $inflight = [];
+
+        /** @var list<string> $inflightMembers */
+        $inflightMembers = $redis->zrange(self::KEY_INFLIGHT, 0, -1);
+
+        foreach ($inflightMembers as $member) {
+            $inflight[(int) strtok($member, ':')] = true;
+        }
+
+        $present = [];
+
+        foreach ($ids as $i => $id) {
+            if ($above[$i] !== false || $below[$i] !== false || isset($inflight[$id])) {
+                $present[] = $id;
+            }
+        }
+
+        return $present;
+    }
+
     public function pop(PriceQuote $quote, int $limit): ?array
     {
         $result = $this->redis()->eval(

@@ -60,6 +60,20 @@ final class InMemoryAlertIndex implements AlertIndex
         unset($this->above[$id], $this->below[$id]);
     }
 
+    public function present(array $ids): array
+    {
+        $inflight = [];
+
+        foreach (array_keys($this->inflight) as $member) {
+            $inflight[(int) strtok($member, ':')] = true;
+        }
+
+        return array_values(array_filter(
+            $ids,
+            fn (int $id): bool => isset($this->above[$id]) || isset($this->below[$id]) || isset($inflight[$id]),
+        ));
+    }
+
     public function pop(PriceQuote $quote, int $limit): ?array
     {
         if (! $this->ready) {
