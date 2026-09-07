@@ -85,5 +85,30 @@ All endpoints live under `/api`, speak JSON, and are rate limited (`GOLD_API_RAT
 | `POST /api/auth/token` | none | `email`, `password`, optional `device_name` | 200 `{token, token_type}` |
 | `GET /api/auth/me` | token | | 200 `{data: {id, name, email}}` |
 | `DELETE /api/auth/logout` | token | | 204, revokes the current token |
+| `GET /api/price` | token | | 200 `{data: {price, unit, source, observed_at, received_at, stale}}`, or 503 before the first tick |
+| `GET /api/alerts` | token | query `status`, `per_page` | 200 paginated list of the caller's alerts, newest first |
+| `POST /api/alerts` | token | `target_price` (up to 4 decimals), optional `direction` (`above`/`below`) | 201 the alert |
+| `GET /api/alerts/{id}` | token, owner | | 200 the alert |
+| `DELETE /api/alerts/{id}` | token, owner | | 204, or 409 while the alert is being delivered |
 
-Validation failures return 422 with an `errors` object; missing or revoked tokens return 401; exceeding a limit returns 429.
+Validation failures return 422 with an `errors` object; missing or revoked tokens return 401; another user's alert returns 403; exceeding a limit returns 429.
+
+Direction rules for `POST /api/alerts`:
+
+- Without `direction`, the target is compared with the current price: above it watches for a rise, under it for a fall. A target equal to the current price is refused as ambiguous.
+- With `direction`, the alert is accepted as long as the current price does not already satisfy it. This is also the only way to create an alert while no fresh price is known (`GET /api/price` reports `stale: true` or 503).
+- A user may hold `GOLD_MAX_ALERTS_PER_USER` alerts and one alert per level and side; a previous alert at the same level that ended in `failed` is replaced automatically.
+
+### Walkthrough
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/api/auth/token -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"password","device_name":"cli"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+AUTH=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -H 'Content-Type: application/json')
+
+curl -s localhost:8000/api/price "${AUTH[@]}"
+curl -s -X POST localhost:8000/api/alerts "${AUTH[@]}" -d '{"target_price":"2700"}'
+docker compose exec app php artisan price:fake-push 2690 2701.25   # walk the price across the alert
+open http://localhost:8025                                          # the email, with the new price
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/alerts/1 "${AUTH[@]}"   # 404: delivered alerts are deleted
+```

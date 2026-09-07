@@ -74,6 +74,9 @@ return [
     // Requests per minute per user (or per IP before authentication).
     'api_rate_per_minute' => (int) env('GOLD_API_RATE_PER_MINUTE', 60),
 
+    // Stored alerts (any status) a single user may hold.
+    'max_alerts_per_user' => (int) env('GOLD_MAX_ALERTS_PER_USER', 100),
+
     'goldapi' => [
         'url' => env('GOLD_API_URL', 'https://www.goldapi.io/api/XAU/USD'),
         'token' => env('GOLD_API_TOKEN', ''),
