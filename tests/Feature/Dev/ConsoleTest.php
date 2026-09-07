@@ -69,6 +69,7 @@ final class ConsoleTest extends TestCase
             ->assertOk()
             ->assertJsonPath('price.price', '2650.2500')
             ->assertJsonPath('price.unit', 'USD/oz')
+            ->assertJsonPath('price.source', 'fake')
             ->assertJsonPath('price.stale', false)
             ->assertJsonPath('index.ready', true)
             ->assertJsonPath('index.above', 1)

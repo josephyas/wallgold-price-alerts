@@ -516,6 +516,7 @@
         <span><i class="sw a"></i> observed price</span>
         <span><i class="sw b"></i> alert target</span>
         <span id="hoverval"></span>
+        <span id="scalenote"></span>
       </div>
     </section>
 
@@ -642,7 +643,10 @@
               <div class="fld"><input id="push-input" inputmode="decimal" placeholder="2690 2701.25" autocomplete="off"></div>
               <button class="key" type="submit">Push</button>
             </div>
-            <p class="hint">Space separated, one per tick, in order. The walk then resumes from the last value.</p>
+            <p class="hint">
+              The fake feed already walks on its own every tick, so the price moves with or without you. Pushing
+              serves these exact values first, one per tick, then the walk resumes from the last one.
+            </p>
           </div>
         </form>
 
@@ -818,7 +822,7 @@
     var quiet = Date.now() - lastTick;
     if (quiet < POLL * 3) { $('live-dot').className = 'dot live'; $('live-text').textContent = 'live'; }
     else { $('live-dot').className = 'dot warn'; $('live-text').textContent = 'no tick for ' + Math.round(quiet / 1000) + 's'; }
-    $('tickmeta').textContent = ticks + ' ticks';
+    $('tickmeta').textContent = (p.source ? p.source + ' feed · ' : '') + ticks + ' ticks';
   }
 
   function renderChart(s) {
@@ -829,10 +833,25 @@
     var targets = (s.alerts || []).filter(function (a) { return a.status === 'active'; })
       .map(function (a) { return { v: Number(a.target_price), d: a.direction }; }).slice(0, 8);
 
+    // The scale fits the price first. A target far from the price would
+    // otherwise stretch the axis until the walk reads as a flat line, so
+    // anything beyond one extra range is pinned to the edge instead.
     var vals = series.map(function (p) { return p.v; });
     var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
-    targets.forEach(function (t) { lo = Math.min(lo, t.v); hi = Math.max(hi, t.v); });
-    var pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
+    var spread = hi - lo;
+    var pad = Math.max(spread * 0.12, vals[vals.length - 1] * 0.0004);
+    lo -= pad; hi += pad;
+
+    // "Near" is measured against the price, not the walk: a band of a few
+    // spreads would be only a handful of units wide, which would push ordinary
+    // alerts off scale and lose the view of the price approaching one.
+    var last = vals[vals.length - 1];
+    var reach = Math.max(spread * 3, last * 0.02);
+    var near = [], far = [];
+    targets.forEach(function (t) {
+      if (Math.abs(t.v - last) <= reach) near.push(t); else far.push(t);
+    });
+    near.forEach(function (t) { lo = Math.min(lo, t.v); hi = Math.max(hi, t.v); });
 
     var X = function (i) { return PL + (i / (series.length - 1)) * (W - PL - PR); };
     var Y = function (v) { return PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB); };
@@ -847,10 +866,22 @@
       g += '<text x="' + (PL - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" fill="#91816A" font-family="IBM Plex Mono, monospace" font-size="10">' + fmt(v) + '</text>';
     });
 
-    targets.forEach(function (t) {
-      if (t.v < lo || t.v > hi) return;
+    near.forEach(function (t) {
       g += '<line x1="' + PL + '" y1="' + Y(t.v) + '" x2="' + (W - PR) + '" y2="' + Y(t.v) + '" stroke="#55B892" stroke-width="1.3" stroke-dasharray="5 4" opacity=".9"/>';
       g += '<text x="' + (W - PR) + '" y="' + (Y(t.v) - 5) + '" text-anchor="end" fill="#55B892" font-family="IBM Plex Mono, monospace" font-size="10">' + t.d + ' ' + fmt(t.v) + '</text>';
+    });
+
+    // Off-scale targets: a marker at the edge they lie beyond, so they stay
+    // visible without dictating the axis.
+    var up = 0, down = 0;
+    far.forEach(function (t) {
+      var above = t.v > hi;
+      var y = above ? PT + 9 + (up++ * 13) : H - PB - 5 - (down++ * 13);
+      var tri = above ? (X(0) + 4) + ',' + (y - 8) + ' ' + (X(0) - 1) + ',' + (y - 2) + ' ' + (X(0) + 9) + ',' + (y - 2)
+                      : (X(0) + 4) + ',' + (y - 1) + ' ' + (X(0) - 1) + ',' + (y - 7) + ' ' + (X(0) + 9) + ',' + (y - 7);
+      g += '<polygon points="' + tri + '" fill="#55B892" opacity=".7"/>';
+      g += '<text x="' + (X(0) + 14) + '" y="' + (y - 1) + '" fill="#55B892" opacity=".85" font-family="IBM Plex Mono, monospace" font-size="9.5">' +
+        t.d + ' ' + fmt(t.v) + ' (off scale)</text>';
     });
 
     g += '<path d="M' + X(0) + ',' + (H - PB) + ' L' + pts.join(' L') + ' L' + X(series.length - 1) + ',' + (H - PB) + ' Z" fill="#E0A93B" opacity=".08"/>';
@@ -867,6 +898,9 @@
     $('hoverval').textContent = hoverIx !== null && series[hoverIx]
       ? 'at cursor: ' + fmt(series[hoverIx].v)
       : series.length + ' ticks shown';
+    $('scalenote').textContent = far.length
+      ? far.length + ' target' + (far.length > 1 ? 's' : '') + ' off scale'
+      : '';
   }
 
   function renderAlerts(s) {

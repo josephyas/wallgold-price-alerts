@@ -150,7 +150,7 @@ final class ConsoleController extends Controller
     }
 
     /**
-     * @return array{available: bool, price: string|null, unit: string, observed_at: string|null, received_at: string|null, stale: bool}
+     * @return array{available: bool, price: string|null, unit: string, source: string|null, observed_at: string|null, received_at: string|null, stale: bool}
      */
     private function priceState(AlertIndex $index): array
     {
@@ -159,17 +159,18 @@ final class ConsoleController extends Controller
         try {
             $current = $index->currentPrice();
         } catch (Throwable) {
-            return ['available' => false, 'price' => null, 'unit' => $unit, 'observed_at' => null, 'received_at' => null, 'stale' => true];
+            return ['available' => false, 'price' => null, 'unit' => $unit, 'source' => null, 'observed_at' => null, 'received_at' => null, 'stale' => true];
         }
 
         if ($current === null) {
-            return ['available' => true, 'price' => null, 'unit' => $unit, 'observed_at' => null, 'received_at' => null, 'stale' => true];
+            return ['available' => true, 'price' => null, 'unit' => $unit, 'source' => null, 'observed_at' => null, 'received_at' => null, 'stale' => true];
         }
 
         return [
             'available' => true,
             'price' => $current->quote->price->toDecimal(),
             'unit' => $unit,
+            'source' => $current->quote->source,
             'observed_at' => $current->quote->observedAt->toIso8601String(),
             'received_at' => $current->receivedAt->toIso8601String(),
             'stale' => $current->isStale((int) config('gold.price_max_age_ms')),
