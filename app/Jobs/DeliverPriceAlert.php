@@ -76,11 +76,24 @@ final class DeliverPriceAlert implements ShouldQueue
             return;
         }
 
-        if (! $this->claim($alert, (int) $config->get('gold.delivery.stale_after_seconds'))) {
-            if (! PriceAlert::query()->whereKey($alert->id)->exists()) {
+        $staleAfterSeconds = (int) $config->get('gold.delivery.stale_after_seconds');
+
+        if (! $this->claim($alert, $staleAfterSeconds)) {
+            $owner = PriceAlert::query()->whereKey($alert->id)->first();
+
+            if (! $owner instanceof PriceAlert) {
                 // The row vanished between loading and claiming (cancelled, or already
                 // delivered by another worker): nothing is owed any more.
                 $index->ack($alert->id, $this->quote->price);
+
+                return;
+            }
+
+            if ($this->attempts() > 1) {
+                // On a retry the silent owner may be this job's own earlier attempt,
+                // killed by the timeout mid-send. Come back once the claim has gone
+                // stale so the retry budget and failed() still apply.
+                $this->release(max(1, $staleAfterSeconds - (int) $owner->updated_at->diffInSeconds(now())));
 
                 return;
             }

@@ -14,6 +14,7 @@ use App\Notifications\PriceAlertTriggered;
 use App\Pricing\Price;
 use App\Pricing\PriceQuote;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Channels\MailChannel;
 use Illuminate\Support\Facades\Notification;
@@ -149,6 +150,25 @@ final class DeliverPriceAlertTest extends TestCase
         self::assertSame(AlertStatus::Sending, $alert->fresh()?->status);
         self::assertSame(1, $alert->fresh()?->attempts);
         self::assertSame(1, $this->index->sizes()['inflight'], 'the owner will acknowledge it');
+    }
+
+    #[Test]
+    public function a_retry_after_a_timed_out_attempt_waits_for_its_own_claim_to_go_stale(): void
+    {
+        Notification::fake();
+        $alert = PriceAlert::factory()->sending()->above('2700')->create(['updated_at' => now()->subSeconds(90)]);
+        $quote = $this->popped($alert, '2701.25');
+        $job = new DeliverPriceAlert($alert->id, $quote);
+        $job->setJob($queueJob = \Mockery::mock(Job::class));
+        $queueJob->shouldReceive('attempts')->andReturn(2);
+        $queueJob->shouldReceive('release')->once()->with(30);
+        $queueJob->shouldNotReceive('delete');
+
+        $this->deliver($job);
+
+        Notification::assertNothingSent();
+        self::assertSame(AlertStatus::Sending, $alert->fresh()?->status);
+        self::assertSame(1, $this->index->sizes()['inflight']);
     }
 
     #[Test]

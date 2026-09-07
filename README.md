@@ -141,7 +141,7 @@ if #below > 0 then redis.call('ZREM', KEYS[2], unpack(below)) end
 |---|---|
 | Two watchers tick at once | The pop script is atomic; each alert is popped by exactly one of them. |
 | The same alert is dispatched twice (retry, reconcile, second watcher) | Only one job wins the `active` to `sending` claim; the other does nothing and leaves the acknowledgement to the winner. |
-| Worker dies before the mail server accepted the message | The row stays `sending`; after `GOLD_DELIVERY_STALE_AFTER_SECONDS` (120) reconcile dispatches it again and the claim re-admits it. Exactly once. |
+| Worker dies before the mail server accepted the message | The row stays `sending`; after `GOLD_DELIVERY_STALE_AFTER_SECONDS` (120) reconcile dispatches it again and the claim re-admits it. Exactly once. A send that hangs past the job's 60 s timeout is killed, retried once the claim has gone stale, and marked `failed` after the third attempt. |
 | Worker dies after the mail server accepted the message but before the row was deleted | Same re-drive: the user may receive the email twice. A rare duplicate beats a silent miss for a price alert, and this is the only path to a duplicate. |
 | The mail server refuses the message (or anything fails before it accepts) | The claim is released back to `active` and the job is retried after 5 s and again after 30 s; after the third failure the alert is marked `failed` for the user to see. |
 | Watcher dies between popping and dispatching | The alerts sit in `alerts:inflight`; once older than `GOLD_INDEX_INFLIGHT_TTL_SECONDS` (600) and with the queue idle, reconcile dispatches them again. |
